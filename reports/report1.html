@@ -1,0 +1,602 @@
+<meta charset="utf-8">
+<style>
+  :root{
+    color-scheme: dark;
+    --bg:#0b0e13; --arena-1:#12161d; --arena-2:#1a1710; --panel:#141a23;
+    --panel-2:#1b2330; --line:#28323f; --line-soft:#1e2732;
+    --ink:#e8eef5; --ink-dim:#9db0c2; --ink-faint:#5f7285;
+    --mine:#43c6f0; --mine-soft:#93e2fb; --mine-bg:#0f2b39;
+    --enemy:#ff5d5d; --enemy-soft:#ff9d9d; --enemy-bg:#341215;
+    --gold:#ffd166; --support:#c8b273;
+    --mono: ui-monospace,"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+    --sans: system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0}
+  .app{
+    font-family:var(--sans); color:var(--ink); background:var(--bg);
+    min-height:100vh; padding:18px clamp(12px,3vw,28px) 34px;
+    max-width:1180px; margin:0 auto;
+    display:flex; flex-direction:column; gap:16px;
+  }
+
+  /* ---- header ---- */
+  .hud{display:flex; flex-wrap:wrap; align-items:baseline; gap:8px 16px}
+  .hud h1{
+    font-size:15px; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+    margin:0; color:var(--ink);
+  }
+  .hud .sub{font-family:var(--mono); font-size:12px; color:var(--ink-faint)}
+  .hud .legend{margin-left:auto; display:flex; gap:14px; font-size:12px; color:var(--ink-dim)}
+  .hud .legend b{font-weight:600}
+  .swatch{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:5px; vertical-align:middle}
+  .swatch.mine{background:var(--mine)} .swatch.enemy{background:var(--enemy)} .swatch.crit{background:var(--gold)}
+
+  /* ---- stage: arena + log ---- */
+  .stage{display:grid; grid-template-columns:minmax(0,460px) minmax(240px,1fr); gap:16px; align-items:start}
+  @media (max-width:840px){ .stage{grid-template-columns:minmax(0,460px); justify-content:center; justify-items:center} }
+
+  .arena{
+    position:relative; width:100%; max-width:460px; aspect-ratio:46/72;
+    border:1px solid var(--line); border-radius:14px; overflow:hidden;
+    background:
+      radial-gradient(120% 55% at 50% 50%, rgba(120,96,52,.16), transparent 60%),
+      linear-gradient(180deg, var(--arena-1) 0%, #14100a 50%, var(--arena-1) 100%);
+    box-shadow:inset 0 0 60px rgba(0,0,0,.6), 0 10px 40px rgba(0,0,0,.35);
+  }
+  /* faint HUD grid + no-man's-land midline */
+  .arena::before{
+    content:""; position:absolute; inset:0; pointer-events:none; opacity:.5;
+    background-image:linear-gradient(var(--line-soft) 1px,transparent 1px),
+                     linear-gradient(90deg,var(--line-soft) 1px,transparent 1px);
+    background-size:44px 44px; mask-image:radial-gradient(120% 80% at 50% 50%,#000,transparent 78%);
+  }
+  .midline{position:absolute; left:0; right:0; top:50%; height:1px; background:linear-gradient(90deg,transparent,var(--line),transparent); pointer-events:none}
+  .zone-tag{position:absolute; left:8px; font-family:var(--mono); font-size:10px; letter-spacing:.16em; color:var(--ink-faint); pointer-events:none}
+  .zone-tag.top{top:6px} .zone-tag.bot{bottom:6px}
+
+  #fx{position:absolute; inset:0; width:100%; height:100%; pointer-events:none}
+
+  .unit{
+    position:absolute; transform:translate(-50%,-50%);
+    display:flex; flex-direction:column; align-items:center; gap:3px;
+    width:80px; padding:6px 4px 5px; border-radius:9px;
+    background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(0,0,0,.18));
+    border:1px solid var(--line); text-align:center; z-index:2;
+    transition:box-shadow .12s ease, border-color .12s ease, transform .12s ease;
+  }
+  .unit .nm{font-size:11px; font-weight:600; line-height:1.05; letter-spacing:.01em}
+  .unit .tag{font-family:var(--mono); font-size:9px; letter-spacing:.08em; color:var(--ink-faint); text-transform:uppercase}
+  .unit .slot{position:absolute; top:-7px; right:-7px; font-family:var(--mono); font-size:9px;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:0 4px; color:var(--ink-dim)}
+  .unit.mine{border-color:rgba(67,198,240,.55); box-shadow:0 0 0 1px rgba(67,198,240,.08)}
+  .unit.mine .nm{color:var(--mine-soft)}
+  .unit.enemy{border-color:rgba(255,93,93,.5); box-shadow:0 0 0 1px rgba(255,93,93,.08)}
+  .unit.enemy .nm{color:var(--enemy-soft)}
+  .unit.overlord{width:92px}
+  .unit.overlord .nm{color:var(--gold)}
+  .unit.drone{width:60px; opacity:.72; padding:4px 3px}
+  .unit.drone .nm{font-size:10px}
+  .unit.dead{opacity:.28; filter:grayscale(1)}
+  .unit.hit-mine{box-shadow:0 0 16px 2px rgba(67,198,240,.55); border-color:var(--mine)}
+  .unit.hit-enemy{box-shadow:0 0 16px 2px rgba(255,93,93,.55); border-color:var(--enemy)}
+
+  /* ---- combat log ---- */
+  .log{
+    width:100%; align-self:stretch; min-height:0;
+    border:1px solid var(--line); border-radius:14px; background:var(--panel);
+    display:flex; flex-direction:column; overflow:hidden;
+    max-height:min(72vh,620px);
+  }
+  @media (max-width:840px){ .log{max-height:300px; max-width:460px} }
+  .log-head{
+    padding:10px 14px; font-size:11px; letter-spacing:.16em; text-transform:uppercase;
+    color:var(--ink-dim); border-bottom:1px solid var(--line-soft); display:flex; justify-content:space-between}
+  .log-head .count{font-family:var(--mono); color:var(--ink-faint)}
+  #logList{list-style:none; margin:0; padding:6px 6px 10px; overflow-y:auto; flex:1; scroll-behavior:smooth}
+  #logList li{
+    display:grid; grid-template-columns:46px 1fr auto; align-items:center; gap:8px;
+    padding:4px 8px; border-radius:7px; font-size:12.5px}
+  #logList li + li{margin-top:1px}
+  #logList li:nth-child(odd){background:rgba(255,255,255,.018)}
+  #logList .t{font-family:var(--mono); font-size:11px; color:var(--ink-faint); text-align:right}
+  #logList .who{color:var(--ink-dim); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  #logList .who .src{font-weight:600}
+  #logList .dmg{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600}
+  #logList li.mine .src{color:var(--mine-soft)} #logList li.mine .dmg{color:var(--mine)}
+  #logList li.enemy .src{color:var(--enemy-soft)} #logList li.enemy .dmg{color:var(--enemy)}
+  #logList li.crit .dmg{color:var(--gold)}
+  #logList .star{color:var(--gold); font-weight:700}
+  .log-empty{padding:18px 14px; color:var(--ink-faint); font-size:12px}
+  /* buff/effect rows: a calmer, gold-accented sibling of the damage row so the
+     eye still tracks damage as primary. Shots are never styled this way. */
+  #logList li.buff{border-left:2px solid var(--support); font-size:12px}
+  #logList li.buff .who{color:var(--ink-faint)}
+  #logList li.buff .chan{font-family:var(--mono); font-size:10.5px; color:var(--ink-dim)}
+  #logList li.buff.mine .src{color:var(--mine-soft)}
+  #logList li.buff.enemy .src{color:var(--enemy-soft)}
+  #logList li.buff .amt{font-family:var(--mono); font-size:11px; color:var(--support);
+    font-variant-numeric:tabular-nums; white-space:nowrap; text-align:right}
+
+  /* ---- controls ---- */
+  .controls{
+    display:flex; flex-wrap:wrap; align-items:center; gap:12px;
+    padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--panel)}
+  .transport{display:flex; gap:6px}
+  .btn{
+    font-family:var(--sans); font-size:14px; color:var(--ink); cursor:pointer;
+    background:var(--panel-2); border:1px solid var(--line); border-radius:8px;
+    width:38px; height:34px; display:grid; place-items:center; transition:background .12s,border-color .12s}
+  .btn:hover{background:#232d3b; border-color:#33404f}
+  .btn.play{width:46px; color:var(--mine)}
+  .btn:focus-visible{outline:2px solid var(--mine); outline-offset:2px}
+  .speeds{display:flex; gap:4px; margin-left:2px}
+  .sp{font-family:var(--mono); font-size:11px; color:var(--ink-dim); cursor:pointer;
+    background:transparent; border:1px solid var(--line); border-radius:7px; padding:5px 8px}
+  .sp.active{color:var(--bg); background:var(--mine); border-color:var(--mine); font-weight:700}
+  .sp:focus-visible{outline:2px solid var(--mine); outline-offset:2px}
+  .scrub-wrap{flex:1; min-width:180px; display:flex; align-items:center}
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:6px; border-radius:6px; cursor:pointer;
+    background:linear-gradient(90deg,var(--mine) 0%,var(--mine) var(--pct,0%),#2a3542 var(--pct,0%),#2a3542 100%)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:14px; height:14px; border-radius:50%;
+    background:var(--ink); border:2px solid var(--mine); box-shadow:0 0 6px rgba(67,198,240,.6)}
+  input[type=range]::-moz-range-thumb{width:14px; height:14px; border:2px solid var(--mine); border-radius:50%; background:var(--ink)}
+  input[type=range]:focus-visible{outline:2px solid var(--mine); outline-offset:3px}
+  .clock{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:13px; color:var(--ink-dim); white-space:nowrap}
+  .clock #tNow{color:var(--ink); font-weight:600}
+
+  /* ---- header match clock (top-right) ---- */
+  .hud-right{margin-left:auto; display:flex; align-items:center; gap:18px}
+  .hud .legend{margin-left:0}
+  .match-clock{
+    font-family:var(--mono); font-variant-numeric:tabular-nums;
+    font-size:22px; font-weight:600; color:var(--ink); line-height:1;
+    display:flex; align-items:baseline; gap:2px}
+  .match-clock::before{content:"\23F1"; font-size:15px; color:var(--ink-faint); margin-right:6px; align-self:center}
+  .match-clock .s{font-size:13px; color:var(--ink-faint); font-weight:400}
+    /* match clock overlaid in the arena's top-right corner (moved out of the header) */
+  .arena-clock{
+    position:absolute; top:8px; right:10px; z-index:3; pointer-events:none;
+    font-size:18px; padding:3px 9px; border-radius:9px;
+    background:rgba(11,14,19,.55); border:1px solid var(--line-soft);
+  }
+  .arena-clock::before{font-size:13px; margin-right:5px}
+  .arena-clock .s{font-size:11px}
+  /* ---- stats panel (DEF + live damage tallies) ---- */
+  .stats{display:grid; grid-template-columns:1fr 1fr; gap:16px}
+  @media (max-width:720px){ .stats{grid-template-columns:1fr} }
+  .stats-col{border:1px solid var(--line); border-radius:12px; background:var(--panel); overflow:hidden}
+  .stats-head{
+    display:flex; align-items:center; gap:8px; padding:9px 14px;
+    font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-dim);
+    border-bottom:1px solid var(--line-soft)}
+  .stats-head .dot{width:9px; height:9px; border-radius:2px}
+  .stats-head .dot.mine{background:var(--mine)} .stats-head .dot.enemy{background:var(--enemy)}
+  .stats table{width:100%; border-collapse:collapse; font-size:12.5px}
+  .stats th{
+    font-weight:500; text-align:right; padding:6px 12px; color:var(--ink-faint);
+    font-size:10px; letter-spacing:.07em; text-transform:uppercase; white-space:nowrap}
+  .stats th.nm{text-align:left}
+  .stats td{
+    padding:6px 12px; border-top:1px solid var(--line-soft); text-align:right;
+    font-family:var(--mono); font-variant-numeric:tabular-nums; color:var(--ink)}
+  .stats td.nm{font-family:var(--sans); text-align:left; font-weight:600; white-space:nowrap}
+  .stats tr[data-team=mine] td.nm{color:var(--mine-soft)}
+  .stats tr[data-team=enemy] td.nm{color:var(--enemy-soft)}
+  .stats tr.support td.nm{color:var(--support)}
+  .stats td.def{color:var(--ink-dim)}
+  .stats td.dealt{color:var(--ink); font-weight:600}
+  .stats td.taken{color:var(--enemy-soft)}
+  .stats .kindtag{font-size:9px; color:var(--ink-faint); font-family:var(--mono); margin-left:6px; text-transform:uppercase; letter-spacing:.06em}
+    /* ATK + the five-group mitigation block (DR energy/phys, Misc, RES phys/energy).
+     Boxed as one group and kept in a horizontal-scroll wrapper so the wide row
+     scrolls instead of crushing. Values are static t=0 now; the timed layer will
+     drive the same cells off the playhead. */
+  .stats .stats-scroll{overflow-x:auto}
+  .stats-scroll table{width:100%}
+  .stats td.atk{color:var(--ink-dim)}
+  .stats .mit{font-size:11px; color:var(--ink-dim); background:rgba(255,255,255,.025); white-space:nowrap}
+  .stats th.mit{color:var(--ink-faint)}
+  .stats td.res{color:var(--ink)}
+  .stats .mledge{border-left:1px solid var(--line)}
+  .stats .mredge{border-right:1px solid var(--line)}
+</style>
+
+<div class="app">
+  <header class="hud">
+    <h1>Battle Replay</h1>
+    <span class="sub" id="metaLine">—</span>
+    <div class="hud-right">
+        <span class="legend">
+        <span><span class="swatch mine"></span><b>You</b></span>
+        <span><span class="swatch enemy"></span><b>Enemy</b></span>
+        <span><span class="swatch crit"></span><b>Crit</b></span>
+      </span>
+    </div>
+  </header>
+
+  <div class="stage">
+      <div class="arena" id="arena">
+      <span class="zone-tag top">ENEMY</span>
+      <span class="zone-tag bot">YOU</span>
+      <span class="match-clock arena-clock"><span id="tBig">0.00</span><span class="s">s</span></span>
+      <div class="midline"></div>
+      <canvas id="fx"></canvas>
+    </div>
+
+    <aside class="log">
+      <div class="log-head"><span>Combat Log</span><span class="count" id="logCount">0 hits</span></div>
+      <ol id="logList"><li class="log-empty">Press play to run the battle.</li></ol>
+    </aside>
+  </div>
+
+  <div class="controls">
+    <div class="transport">
+      <button class="btn" id="prev" title="Previous event" aria-label="Previous event">⏮</button>
+      <button class="btn play" id="play" title="Play / pause" aria-label="Play">▶</button>
+      <button class="btn" id="next" title="Next event" aria-label="Next event">⏭</button>
+    </div>
+    <div class="speeds" id="speeds"></div>
+    <div class="scrub-wrap"><input type="range" id="scrub" min="0" max="1000" value="0" step="10" aria-label="Timeline"></div>
+    <div class="clock"><span id="tNow">0.00</span> / <span id="tEnd">0.00</span>s</div>
+  </div>
+
+  <section class="stats" id="stats"></section>
+</div>
+
+<script>
+const BATTLE = {"meta":{"battleId":"report1","mode":"PvP","durationMs":11487},"units":[{"slot":4,"name":"Schuyler","team":"mine","kind":"hero","row":"back","def":38927,"atk":227856,"mit":{"dr_en":0.37,"dr_ph":0.37,"misc":0.315,"res_ph":0.64599998,"res_en":0.64599998}},{"slot":6,"name":"Carlie","team":"enemy","kind":"hero","row":"front","def":33025,"atk":164541,"mit":{"dr_en":0.75,"dr_ph":0.43300003,"misc":0.402499996,"res_ph":0.32499999,"res_en":0.32499999}},{"slot":7,"name":"DVA","team":"enemy","kind":"hero","row":"front","def":33699,"atk":200994,"mit":{"dr_en":0.56600003,"dr_ph":0.43300003,"misc":0.427499994,"res_ph":0.33999999000000003,"res_en":0.33999999000000003}},{"slot":8,"name":"Morrison","team":"enemy","kind":"hero","row":"back","def":31398,"atk":192942,"mit":{"dr_en":0.3,"dr_ph":0.3,"misc":0.402499996,"res_ph":0.31999999,"res_en":0.31999999}},{"slot":9,"name":"Lucius","team":"enemy","kind":"hero","row":"back","def":33323,"atk":167577,"mit":{"dr_en":0.3,"dr_ph":0.3,"misc":0.402499996,"res_ph":0.33,"res_en":0.33}},{"slot":10,"name":"Schuyler","team":"enemy","kind":"hero","row":"back","def":32128,"atk":200085,"mit":{"dr_en":0.3,"dr_ph":0.3,"misc":0.402499996,"res_ph":0.33,"res_en":0.33}},{"slot":11,"name":"drone","team":"mine","kind":"drone","row":"back","def":null,"atk":null,"mit":null},{"slot":12,"name":"drone","team":"enemy","kind":"drone","row":"back","def":null,"atk":null,"mit":null},{"slot":13,"name":"overlord","team":"mine","kind":"overlord","row":"back","def":null,"atk":null,"mit":{"dr_en":0.3,"dr_ph":0.3,"misc":0.20500000000000002,"res_ph":0.35,"res_en":0.35}}],"shots":[{"t":2144,"src":4,"tgt":6,"dmg":282835,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":2267,"src":6,"tgt":13,"dmg":257377,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":2475,"src":10,"tgt":13,"dmg":391355,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":2488,"src":9,"tgt":13,"dmg":278782,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":2528,"src":8,"tgt":13,"dmg":396951,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":2767,"src":13,"tgt":6,"dmg":225930,"crit":true,"team":"mine","role":"tactic1","kind":"dmg"},{"t":2885,"src":7,"tgt":13,"dmg":558181,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":3144,"src":4,"tgt":6,"dmg":128839,"crit":false,"team":"mine","role":"auto","kind":"dmg"},{"t":3267,"src":6,"tgt":13,"dmg":536696,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":3475,"src":10,"tgt":13,"dmg":391355,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":3488,"src":9,"tgt":13,"dmg":278782,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":3528,"src":8,"tgt":13,"dmg":396951,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":4144,"src":4,"tgt":6,"dmg":282835,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":4235,"src":7,"tgt":13,"dmg":550625,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":4267,"src":6,"tgt":13,"dmg":536696,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":4267,"src":13,"tgt":6,"dmg":104581,"crit":false,"team":"mine","role":"tactic1","kind":"dmg"},{"t":4475,"src":10,"tgt":13,"dmg":391355,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":4488,"src":9,"tgt":13,"dmg":278782,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":4528,"src":8,"tgt":13,"dmg":396951,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":5144,"src":4,"tgt":6,"dmg":128839,"crit":false,"team":"mine","role":"auto","kind":"dmg"},{"t":5267,"src":6,"tgt":13,"dmg":257377,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":5475,"src":10,"tgt":13,"dmg":816074,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":5488,"src":9,"tgt":13,"dmg":278782,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":5528,"src":8,"tgt":13,"dmg":396951,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":5585,"src":7,"tgt":13,"dmg":543070,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":5767,"src":13,"tgt":6,"dmg":104581,"crit":false,"team":"mine","role":"tactic1","kind":"dmg"},{"t":6144,"src":4,"tgt":6,"dmg":282835,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":6267,"src":6,"tgt":13,"dmg":257377,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":6397,"src":8,"tgt":4,"dmg":314651,"crit":false,"team":"enemy","role":"passive1","kind":"dmg"},{"t":6475,"src":10,"tgt":13,"dmg":816074,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":6488,"src":9,"tgt":13,"dmg":278782,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":6528,"src":8,"tgt":13,"dmg":827743,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":6935,"src":7,"tgt":13,"dmg":535514,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":7144,"src":4,"tgt":6,"dmg":282835,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":7267,"src":6,"tgt":13,"dmg":485617,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":7267,"src":13,"tgt":6,"dmg":104581,"crit":false,"team":"mine","role":"tactic1","kind":"dmg"},{"t":7475,"src":10,"tgt":13,"dmg":738407,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":7488,"src":9,"tgt":13,"dmg":1096850,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":7528,"src":8,"tgt":13,"dmg":748965,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":8144,"src":4,"tgt":6,"dmg":282835,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":8267,"src":6,"tgt":13,"dmg":485617,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":9000,"src":11,"tgt":6,"dmg":251444,"crit":false,"team":"mine","role":"slot0","kind":"dmg"},{"t":9000,"src":11,"tgt":7,"dmg":243141,"crit":false,"team":"mine","role":"slot0","kind":"dmg"},{"t":9000,"src":11,"tgt":10,"dmg":356149,"crit":false,"team":"mine","role":"slot0","kind":"dmg"},{"t":9000,"src":11,"tgt":8,"dmg":362970,"crit":false,"team":"mine","role":"slot0","kind":"dmg"},{"t":9000,"src":11,"tgt":9,"dmg":349866,"crit":false,"team":"mine","role":"slot0","kind":"dmg"},{"t":9000,"src":12,"tgt":4,"dmg":88115,"crit":false,"team":"enemy","role":"slot0","kind":"dmg"},{"t":9144,"src":4,"tgt":6,"dmg":386729,"crit":true,"team":"mine","role":"auto","kind":"dmg"},{"t":9544,"src":7,"tgt":4,"dmg":708935,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":10144,"src":6,"tgt":4,"dmg":299496,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":10144,"src":4,"tgt":6,"dmg":176166,"crit":false,"team":"mine","role":"auto","kind":"dmg"},{"t":10234,"src":6,"tgt":4,"dmg":177440,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10234,"src":7,"tgt":4,"dmg":1228419,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10383,"src":9,"tgt":4,"dmg":417716,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":10397,"src":8,"tgt":4,"dmg":583557,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":10397,"src":10,"tgt":4,"dmg":569117,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":10473,"src":4,"tgt":10,"dmg":1462832,"crit":false,"team":"mine","role":"tactic1","kind":"dmg"},{"t":10473,"src":4,"tgt":9,"dmg":1441551,"crit":false,"team":"mine","role":"tactic1","kind":"dmg"},{"t":10473,"src":4,"tgt":8,"dmg":3166087,"crit":true,"team":"mine","role":"tactic1","kind":"dmg"},{"t":10487,"src":8,"tgt":4,"dmg":364827,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10587,"src":8,"tgt":4,"dmg":368517,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10687,"src":8,"tgt":4,"dmg":372282,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10787,"src":8,"tgt":4,"dmg":376125,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10887,"src":8,"tgt":4,"dmg":380048,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":10894,"src":7,"tgt":4,"dmg":1310253,"crit":true,"team":"enemy","role":"auto","kind":"dmg"},{"t":10987,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":11087,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":11144,"src":6,"tgt":4,"dmg":319177,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":11144,"src":4,"tgt":6,"dmg":162016,"crit":false,"team":"mine","role":"auto","kind":"dmg"},{"t":11187,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":11287,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":11383,"src":9,"tgt":4,"dmg":442692,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":11387,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"},{"t":11397,"src":8,"tgt":4,"dmg":614312,"crit":false,"team":"enemy","role":"auto","kind":"dmg"},{"t":11397,"src":8,"tgt":4,"dmg":1056,"crit":false,"team":"enemy","role":"passive1","kind":"dmg"},{"t":11487,"src":8,"tgt":4,"dmg":384054,"crit":false,"team":"enemy","role":"tactic1","kind":"dmg"}],"buffs":[{"t":0,"src":13,"role":"auto","chan":"50011 crit rate","amount":"+0.180","window":"20.0s","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":0,"src":7,"role":"passive1","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":10}],"team":"enemy"},{"t":0,"src":7,"role":"passive1","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":10}],"team":"enemy"},{"t":0,"src":13,"role":"tactic2","chan":"75974 auto-atk dmg-taken reduction","amount":"+0.470","window":"7.0s","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":0,"src":13,"role":"tactic2","chan":"76050 all dmg-taken reduction","amount":"+0.070","window":"perm","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":1,"src":11,"role":"slot0","chan":"75251 DEF% boost (buff)","amount":"+0.345","window":"perm","targets":[{"slot":13,"name":"overlord","stacks":1},{"slot":4,"name":"Schuyler","stacks":1}],"team":"mine"},{"t":1,"src":11,"role":"slot0","chan":"75251 DEF% boost (buff)","amount":"+0.650","window":"perm","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":1,"src":12,"role":"tactic1","chan":"75251 DEF% boost (buff)","amount":"+0.280","window":"perm","targets":[{"slot":10,"name":"Schuyler","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":6,"name":"Carlie","stacks":1},{"slot":8,"name":"Morrison","stacks":1},{"slot":9,"name":"Lucius","stacks":1}],"team":"enemy"},{"t":1,"src":12,"role":"tactic1","chan":"75251 DEF% boost (buff)","amount":"+0.600","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1},{"slot":6,"name":"Carlie","stacks":1}],"team":"enemy"},{"t":186,"src":11,"role":"tactic1","chan":"code 714046 ultra fission enmy","amount":"","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1},{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":273,"src":12,"role":"slot0","chan":"code 714045 (unnamed)","amount":"","window":"9.0s","targets":[{"slot":8,"name":"Morrison","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":6,"name":"Carlie","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":10,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":845,"src":13,"role":"auto","chan":"50154 reduced dmg from crit","amount":"-0.070","window":"20.0s","targets":[{"slot":6,"name":"Carlie","stacks":1},{"slot":7,"name":"DVA","stacks":1}],"team":"mine"},{"t":1019,"src":13,"role":"auto","chan":"50011 crit rate","amount":"-0.070","window":"20.0s","targets":[{"slot":9,"name":"Lucius","stacks":1},{"slot":8,"name":"Morrison","stacks":1},{"slot":10,"name":"Schuyler","stacks":1}],"team":"mine"},{"t":1267,"src":6,"role":"passive1","chan":"75968 auto-atk dmg dealt down","amount":"-0.120","window":"perm","targets":[{"slot":13,"name":"overlord","stacks":1},{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":2264,"src":9,"role":"passive1","chan":"code 502121 (unnamed)","amount":"","window":"3.0s","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":2767,"src":13,"role":"tactic1","chan":"75950 tech dmg-taken reduction","amount":"+0.020","window":"perm","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"mine"},{"t":2885,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":2885,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":3475,"src":10,"role":"auto","chan":"code 501820 disruption/mark","amount":"","window":"2.0s","targets":[{"slot":13,"name":"overlord","stacks":1}],"team":"enemy"},{"t":4200,"src":9,"role":"passive1","chan":"code 502121 (unnamed)","amount":"","window":"3.0s","targets":[{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":4235,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":4235,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":4500,"src":11,"role":"passive1","chan":"code 744146 (unnamed)","amount":"","window":"perm","targets":[{"slot":11,"name":"drone","stacks":1}],"team":"mine"},{"t":4500,"src":12,"role":"awaken","chan":"code 744145 (unnamed)","amount":"","window":"perm","targets":[{"slot":12,"name":"drone","stacks":1}],"team":"enemy"},{"t":5144,"src":4,"role":"auto","chan":"code 501820 disruption/mark","amount":"","window":"2.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"mine"},{"t":5585,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":5585,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":6264,"src":9,"role":"passive1","chan":"code 502121 (unnamed)","amount":"","window":"3.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"enemy"},{"t":6935,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":6935,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":8144,"src":4,"role":"auto","chan":"code 501820 disruption/mark","amount":"","window":"2.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"mine"},{"t":8264,"src":9,"role":"passive1","chan":"code 502121 (unnamed)","amount":"","window":"3.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"enemy"},{"t":9000,"src":11,"role":"tactic2","chan":"76050 all dmg-taken reduction","amount":"+0.160","window":"perm","targets":[{"slot":4,"name":"Schuyler","stacks":1},{"slot":11,"name":"drone","stacks":1}],"team":"mine"},{"t":9000,"src":11,"role":"awaken","chan":"75151 ATK% boost (buff)","amount":"+0.212","window":"3.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"mine"},{"t":9000,"src":11,"role":"slot0","chan":"76100 dmg taken up (amp)","amount":"+0.250","window":"5.0s","targets":[{"slot":6,"name":"Carlie","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":10,"name":"Schuyler","stacks":1},{"slot":8,"name":"Morrison","stacks":1},{"slot":9,"name":"Lucius","stacks":1}],"team":"mine"},{"t":9000,"src":12,"role":"tactic2","chan":"75151 ATK% boost (buff)","amount":"+0.167","window":"3.0s","targets":[{"slot":10,"name":"Schuyler","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":9000,"src":12,"role":"slot0","chan":"76100 dmg taken up (amp)","amount":"+0.250","window":"4.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":9000,"src":12,"role":"tactic2","chan":"code 501820 disruption/mark","amount":"","window":"1.1s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"enemy"},{"t":9000,"src":11,"role":"auto","chan":"75950 tech dmg-taken reduction","amount":"+0.240","window":"3.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"mine"},{"t":9000,"src":11,"role":"auto","chan":"76000 tactics dmg dealt down","amount":"+0.160","window":"3.0s","targets":[{"slot":9,"name":"Lucius","stacks":1},{"slot":10,"name":"Schuyler","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":8,"name":"Morrison","stacks":1},{"slot":6,"name":"Carlie","stacks":1}],"team":"mine"},{"t":9000,"src":12,"role":"passive1","chan":"75950 tech dmg-taken reduction","amount":"+0.167","window":"3.0s","targets":[{"slot":10,"name":"Schuyler","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":9000,"src":12,"role":"passive1","chan":"76000 tactics dmg dealt down","amount":"+0.107","window":"3.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":9090,"src":4,"role":"passive2","chan":"code 501810 stun","amount":"","window":"2.0s","targets":[{"slot":10,"name":"Schuyler","stacks":1}],"team":"mine"},{"t":9090,"src":4,"role":"tactic1","chan":"code 501821 tactics 3-hero dmg","amount":"","window":"9.0s","targets":[{"slot":10,"name":"Schuyler","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":8,"name":"Morrison","stacks":1}],"team":"mine"},{"t":9090,"src":7,"role":"tactic1","chan":"75650 attack speed","amount":"+0.200","window":"5.0s","targets":[{"slot":7,"name":"DVA","stacks":5}],"team":"enemy"},{"t":9090,"src":9,"role":"tactic1","chan":"76052 energy dmg-taken reduction","amount":"+0.150","window":"8.0s","targets":[{"slot":6,"name":"Carlie","stacks":1},{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":9090,"src":9,"role":"tactic1","chan":"code 501821 tactics 3-hero dmg","amount":"","window":"9.0s","targets":[{"slot":9,"name":"Lucius","stacks":1}],"team":"enemy"},{"t":9090,"src":9,"role":"tactic1","chan":"code 501821 tactics 3-hero dmg","amount":"","window":"9.0s","targets":[{"slot":10,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":9090,"src":9,"role":"tactic1","chan":"code 501821 tactics 3-hero dmg","amount":"","window":"9.0s","targets":[{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":9094,"src":9,"role":"tactic1","chan":"76052 energy dmg-taken reduction","amount":"+0.209","window":"8.0s","targets":[{"slot":7,"name":"DVA","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":6,"name":"Carlie","stacks":1},{"slot":10,"name":"Schuyler","stacks":1},{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":9096,"src":9,"role":"tactic1","chan":"code 502120 (unnamed)","amount":"","window":"8.0s","targets":[{"slot":9,"name":"Lucius","stacks":1},{"slot":10,"name":"Schuyler","stacks":1},{"slot":6,"name":"Carlie","stacks":1},{"slot":8,"name":"Morrison","stacks":1},{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":9441,"src":12,"role":"auto","chan":"76050 all dmg-taken reduction","amount":"+0.150","window":"perm","targets":[{"slot":10,"name":"Schuyler","stacks":1},{"slot":9,"name":"Lucius","stacks":1},{"slot":6,"name":"Carlie","stacks":1},{"slot":12,"name":"drone","stacks":1},{"slot":7,"name":"DVA","stacks":1},{"slot":8,"name":"Morrison","stacks":1}],"team":"enemy"},{"t":9544,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":9544,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":10234,"src":6,"role":"tactic1","chan":"76002 energy dmg dealt down","amount":"+0.150","window":"5.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10264,"src":9,"role":"passive1","chan":"code 502121 (unnamed)","amount":"","window":"3.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"enemy"},{"t":10397,"src":10,"role":"auto","chan":"code 501820 disruption/mark","amount":"","window":"2.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10487,"src":8,"role":"tactic1","chan":"75300 target DEF reduction","amount":"+0.050","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10587,"src":8,"role":"tactic1","chan":"75300 target DEF reduction","amount":"+0.050","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10687,"src":8,"role":"tactic1","chan":"75300 target DEF reduction","amount":"+0.050","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10787,"src":8,"role":"tactic1","chan":"75300 target DEF reduction","amount":"+0.050","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10887,"src":8,"role":"tactic1","chan":"75300 target DEF reduction","amount":"+0.050","window":"9.0s","targets":[{"slot":4,"name":"Schuyler","stacks":1}],"team":"enemy"},{"t":10894,"src":7,"role":"auto","chan":"code 501741 vortex stack","amount":"","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":10894,"src":7,"role":"auto","chan":"75952 vortex energy-dmg","amount":"+0.030","window":"perm","targets":[{"slot":7,"name":"DVA","stacks":1}],"team":"enemy"},{"t":11144,"src":4,"role":"auto","chan":"code 501820 disruption/mark","amount":"","window":"2.0s","targets":[{"slot":6,"name":"Carlie","stacks":1}],"team":"mine"}]};
+
+const MINE = "#43c6f0", ENEMY = "#ff5d5d", GOLD = "#ffd166";
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// ---------- formation layout (fractions of the arena box) ----------
+function buildLayout(units){
+  const groups = {mine:{front:[],back:[],support:[]}, enemy:{front:[],back:[],support:[]}};
+  for(const u of units){
+    // Overlord carries a late slot id (13/14) but deploys on the front line,
+    // standing left of the front-row heroes; drones sit in the support band.
+    const row = u.kind === "overlord" ? "front" : (u.kind === "hero" ? u.row : "support");
+    (groups[u.team] || groups.mine)[row].push(u);
+  }
+  const bands = {
+    enemy: {support:0.085, back:0.215, front:0.35},
+    mine:  {front:0.65,  back:0.785, support:0.915},
+  };
+  const pos = {};
+  for(const team of ["mine","enemy"]){
+    for(const row of ["front","back","support"]){
+      // overlord first (leftmost), then heroes by slot
+      const arr = groups[team][row].sort((a,b)=>
+        (a.kind==="overlord"?-1:0) - (b.kind==="overlord"?-1:0) || a.slot - b.slot);
+      arr.forEach((u,i)=>{ pos[u.slot] = {x:(i+1)/(arr.length+1), y:bands[team][row]}; });
+    }
+  }
+  return pos;
+}
+
+const pos = buildLayout(BATTLE.units);
+const nameBySlot = {}, unitEl = {};
+for(const u of BATTLE.units) nameBySlot[u.slot] = u.name;
+
+// ---------- render units ----------
+const arena = document.getElementById("arena");
+for(const u of BATTLE.units){
+  const p = pos[u.slot]; if(!p) continue;
+  const el = document.createElement("div");
+  el.className = `unit ${u.team} ${u.kind}`;
+  el.style.left = (p.x*100)+"%";
+  el.style.top  = (p.y*100)+"%";
+  const tag = u.kind === "hero" ? u.row : u.kind;
+  el.innerHTML = `<span class="nm">${u.name}</span><span class="tag">${tag}</span><span class="slot">${u.slot}</span>`;
+  arena.appendChild(el);
+  unitEl[u.slot] = el;
+}
+
+// ---------- canvas ----------
+const canvas = document.getElementById("fx");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+function sizeCanvas(){
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  W = arena.clientWidth; H = arena.clientHeight;
+  canvas.width = Math.round(W*dpr); canvas.height = Math.round(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+new ResizeObserver(sizeCanvas).observe(arena);
+sizeCanvas();
+
+// ---------- data ----------
+const shots = BATTLE.shots;           // damage, sorted by t
+const buffs = BATTLE.buffs || [];     // effect applications, log-only (not drawn)
+for(const s of shots) s.kind = "shot";
+for(const b of buffs) b.kind = "buff";
+// One stream the log walks; the canvas and stats read only the shot entries.
+// At an equal timestamp a shot sorts before the buff it applied.
+const timeline = shots.concat(buffs)
+  .sort((a,b)=> a.t - b.t || (a.kind==="buff") - (b.kind==="buff"));
+const maxT = Math.max(1, BATTLE.meta.durationMs);
+document.getElementById("metaLine").textContent =
+  `${BATTLE.meta.mode} · ${(maxT/1000).toFixed(2)}s · ${shots.length} hits`
+  + (buffs.length ? ` · ${buffs.length} effects` : "") + ` · #${BATTLE.meta.battleId}`;
+document.getElementById("tEnd").textContent = (maxT/1000).toFixed(2);
+
+function fmt(v){
+  const a = Math.abs(v);
+  if(a >= 1e6) return (v/1e6).toFixed(2)+"M";
+  if(a >= 1e3) return (v/1e3).toFixed(2)+"K";
+  return String(Math.round(v));
+}
+
+// ---------- playback state ----------
+let clock = 0, playing = false, speed = 1, cursor = 0, lastReal = null;
+const active = [];                    // live tracers: {shot, born}
+const TRAVEL = reduceMotion ? 1 : 210, HOLD = 720, LIFE = TRAVEL + HOLD;
+
+const scrub = document.getElementById("scrub");
+scrub.max = maxT;
+const tNow = document.getElementById("tNow");
+const tBig = document.getElementById("tBig");
+const playBtn = document.getElementById("play");
+
+function spawnShot(shot){
+  active.push({shot, born:performance.now()});
+  const el = unitEl[shot.tgt];
+  if(el){
+    const cls = shot.team === "mine" ? "hit-mine" : "hit-enemy";
+    setTimeout(()=>{ el.classList.add(cls); setTimeout(()=>el.classList.remove(cls), 150); },
+      reduceMotion ? 0 : TRAVEL);
+  }
+}
+function spawnAtTime(t){ for(const e of timeline) if(e.kind === "shot" && e.t === t) spawnShot(e); }
+
+// ---------- combat log ----------
+const logList = document.getElementById("logList");
+const logCount = document.getElementById("logCount");
+let loggedTo = -1;                    // index in timeline already in the log
+function shotRow(s){
+  const li = document.createElement("li");
+  li.className = s.team + (s.crit ? " crit" : "");
+  li.innerHTML =
+    `<span class="t">${(s.t/1000).toFixed(2)}</span>`+
+    `<span class="who"><span class="src">${nameBySlot[s.src]??"?"}</span> → ${nameBySlot[s.tgt]??"?"}</span>`+
+    `<span class="dmg">-${s.dmg.toLocaleString("en-US")}${s.crit?'<span class="star"> !</span>':''}</span>`;
+  return li;
+}
+function buffRow(b){
+  const li = document.createElement("li");
+  li.className = "buff " + (b.team || "");
+  const tgts = b.targets.map(x => (x.name ?? "?") + (x.stacks > 1 ? ` ×${x.stacks}` : "")).join(", ");
+  const meta = [b.amount, b.window].filter(Boolean).join(" · ");
+  li.innerHTML =
+    `<span class="t">${(b.t/1000).toFixed(2)}</span>`+
+    `<span class="who"><span class="src">${nameBySlot[b.src]??"?"}</span> `+
+      `<span class="chan">${b.chan}</span> → ${tgts || "—"}</span>`+
+    `<span class="amt">${meta}</span>`;
+  return li;
+}
+function logRow(e){ return e.kind === "buff" ? buffRow(e) : shotRow(e); }
+function appendLog(idx){
+  if(loggedTo === -1) logList.innerHTML = "";
+  logList.appendChild(logRow(timeline[idx]));
+  while(logList.children.length > 80) logList.removeChild(logList.firstChild);
+  loggedTo = idx;
+  logList.scrollTop = logList.scrollHeight;
+}
+function rebuildLog(){
+  logList.innerHTML = "";
+  const from = Math.max(0, cursor - 80);
+  for(let i=from; i<cursor; i++) logList.appendChild(logRow(timeline[i]));
+  loggedTo = cursor - 1;
+  if(cursor === 0) logList.innerHTML = '<li class="log-empty">Press play to run the battle.</li>';
+  logCount.textContent = `${cursor} / ${timeline.length} events`;
+  logList.scrollTop = logList.scrollHeight;
+}
+
+// ---------- stats panel (DEF snapshot + live damage tallies) ----------
+// ---------- stats panel (ATK/DEF + mitigation snapshot + live damage tallies) ----------
+// statCells holds every updatable <td> per slot. dealt/taken are live; atk/def/mit
+// are static t=0 snapshots now, but kept addressable here so the timed layer can
+// later drive them off the playhead without touching the table markup.
+const statCells = {};
+(function buildStats(){
+  const host = document.getElementById("stats");
+  const num = v => (v == null) ? "—" : v.toLocaleString("en-US");
+  const pct = v => (v == null) ? "—" : (v * 100).toFixed(1) + "%";
+  for(const [team,label] of [["mine","You"],["enemy","Enemy"]]){
+    const col = document.createElement("div");
+    col.className = "stats-col";
+    const rows = BATTLE.units
+      .filter(u => u.team === team)
+      .sort((a,b) => a.slot - b.slot)
+      .map(u => {
+        const support = u.kind === "hero" ? "" : "support";
+        // Tag non-heroes with their kind, unless the generic name already says it
+        // (drones/overlords often decode to the bare name "drone"/"overlord").
+        const kindTag = (u.kind !== "hero" && u.name.toLowerCase() !== u.kind)
+          ? `<span class="kindtag">${u.kind}</span>` : "";
+        const m = u.mit || {};           // {} -> every group reads "—" for this unit
+        return `<tr data-team="${team}" data-slot="${u.slot}" class="${support}">`+
+          `<td class="nm">${u.name}${kindTag}</td>`+
+          `<td class="atk">${num(u.atk)}</td>`+
+          `<td class="def">${num(u.def)}</td>`+
+          `<td class="mit mledge">${pct(m.dr_en)}</td>`+
+          `<td class="mit">${pct(m.dr_ph)}</td>`+
+          `<td class="mit">${pct(m.misc)}</td>`+
+          `<td class="mit res">${pct(m.res_ph)}</td>`+
+          `<td class="mit res mredge">${pct(m.res_en)}</td>`+
+          `<td class="dealt">0</td><td class="taken">0</td></tr>`;
+      }).join("");
+    const emptyRow = '<tr><td class="nm">—</td>' + '<td></td>'.repeat(9) + '</tr>';
+    col.innerHTML =
+      `<div class="stats-head"><span class="dot ${team}"></span>${label}</div>`+
+      `<div class="stats-scroll"><table><thead><tr>`+
+        `<th class="nm">Hero</th>`+
+        `<th title="Attack: panel 50015 + unit pool (t=0)">Atk</th>`+
+        `<th title="Defence: panel 50017 + unit pool (t=0)">Def</th>`+
+        `<th class="mit mledge" title="DR group vs energy: 76050+76052, capped 75%">DR en</th>`+
+        `<th class="mit" title="DR group vs physical: 76050+76051, capped 75%">DR ph</th>`+
+        `<th class="mit" title="Misc / damage-taken reduction: 76150+75950, capped 75%">Misc</th>`+
+        `<th class="mit res" title="RES vs physical: 76057+76058, uncapped">RES ph</th>`+
+        `<th class="mit res mredge" title="RES vs energy: 76057+76059, uncapped">RES en</th>`+
+        `<th>Dmg Dealt</th><th>Dmg Taken</th>`+
+      `</tr></thead>`+
+      `<tbody>${rows || emptyRow}</tbody></table></div>`;
+    host.appendChild(col);
+    col.querySelectorAll("tr[data-slot]").forEach(tr => {
+      statCells[tr.dataset.slot] = {
+        dealt: tr.querySelector(".dealt"),
+        taken: tr.querySelector(".taken"),
+        atk: tr.querySelector(".atk"),
+        def: tr.querySelector(".def"),
+        mit: tr.querySelectorAll(".mit"),   // 5: dr_en, dr_ph, misc, res_ph, res_en
+      };
+    });
+  }
+})();
+
+let statsCursor = -1;                 // last cursor the tallies were computed for
+function updateStats(){
+  if(cursor === statsCursor) return;  // tallies only change when a shot crosses
+  statsCursor = cursor;
+  const dealt = {}, taken = {};
+  for(let i=0; i<cursor; i++){
+    const s = timeline[i];
+    if(s.kind !== "shot") continue;   // buffs carry no damage
+    dealt[s.src] = (dealt[s.src] || 0) + s.dmg;
+    taken[s.tgt] = (taken[s.tgt] || 0) + s.dmg;
+  }
+  for(const slot in statCells){
+    statCells[slot].dealt.textContent = (dealt[slot] || 0).toLocaleString("en-US");
+    statCells[slot].taken.textContent = (taken[slot] || 0).toLocaleString("en-US");
+  }
+}
+
+// ---------- clock control ----------
+function countUpTo(t){ let i=0; while(i<timeline.length && timeline[i].t <= t) i++; return i; }
+function setClock(v, {clear=true}={}){
+  clock = Math.max(0, Math.min(maxT, v));
+  cursor = countUpTo(clock);
+  if(clear) active.length = 0;
+  lastReal = null;
+  rebuildLog();
+  syncUI();
+}
+function syncUI(){
+  scrub.value = clock;
+  scrub.style.setProperty("--pct", (clock/maxT*100)+"%");
+  tNow.textContent = (clock/1000).toFixed(2);
+  tBig.textContent = (clock/1000).toFixed(2);
+  logCount.textContent = `${cursor} / ${timeline.length} events`;
+  playBtn.textContent = playing ? "⏸" : "▶";
+  playBtn.setAttribute("aria-label", playing ? "Pause" : "Play");
+  updateStats();
+}
+
+// ---------- main loop ----------
+function frame(now){
+  if(playing){
+    if(lastReal === null) lastReal = now;
+    let next = clock + (now - lastReal) * speed;
+    lastReal = now;
+    if(next >= maxT){ next = maxT; playing = false; }
+    while(cursor < timeline.length && timeline[cursor].t <= next){
+      if(timeline[cursor].kind === "shot") spawnShot(timeline[cursor]);
+      appendLog(cursor);
+      cursor++;
+    }
+    clock = next;
+    syncUI();
+  } else {
+    lastReal = null;
+  }
+  drawFx(now);
+  requestAnimationFrame(frame);
+}
+
+function drawFx(now){
+  ctx.clearRect(0,0,W,H);
+  ctx.lineCap = "round";
+  for(let i=active.length-1; i>=0; i--){
+    const a = active[i], age = now - a.born;
+    if(age > LIFE){ active.splice(i,1); continue; }
+    const s = pos[a.shot.src], t = pos[a.shot.tgt];
+    if(!s || !t){ active.splice(i,1); continue; }
+    const sx=s.x*W, sy=s.y*H, tx=t.x*W, ty=t.y*H;
+    const col = a.shot.team === "mine" ? MINE : ENEMY;
+
+    if(age < TRAVEL){
+      const p = age/TRAVEL;
+      const cx = sx+(tx-sx)*p, cy = sy+(ty-sy)*p;
+      const trail = 0.22;
+      const bx = sx+(tx-sx)*Math.max(0,p-trail), by = sy+(ty-sy)*Math.max(0,p-trail);
+      ctx.globalAlpha = 0.9;
+      ctx.strokeStyle = col; ctx.lineWidth = a.shot.crit ? 3 : 2;
+      ctx.shadowBlur = 8; ctx.shadowColor = col;
+      ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(cx,cy); ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1; ctx.fillStyle = "#fff";
+      ctx.beginPath(); ctx.arc(cx,cy, a.shot.crit?3.2:2.4, 0, 7); ctx.fill();
+    } else {
+      const p = (age-TRAVEL)/HOLD;               // 0..1 impact phase
+      // impact ring
+      ctx.globalAlpha = (1-p)*0.6;
+      ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(tx,ty, 6+p*22, 0, 7); ctx.stroke();
+      // rising damage number
+      const crit = a.shot.crit;
+      ctx.globalAlpha = Math.max(0, 1-p);
+      ctx.font = `${crit?"700 ":"600 "}${crit?17:13}px ui-monospace,Consolas,monospace`;
+      ctx.textAlign = "center";
+      ctx.fillStyle = crit ? GOLD : col;
+      ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,.9)";
+      ctx.fillText(`-${fmt(a.shot.dmg)}${crit?"!":""}`, tx, ty - 10 - p*30);
+      ctx.shadowBlur = 0;
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---------- controls ----------
+playBtn.onclick = ()=>{
+  if(clock >= maxT) setClock(0);
+  playing = !playing; lastReal = null; syncUI();
+};
+document.getElementById("next").onclick = ()=>{
+  playing = false;
+  let i = cursor;                                // first event with t > clock
+  while(i < timeline.length && timeline[i].t <= clock) i++;
+  if(i >= timeline.length) return;
+  setClock(timeline[i].t);
+  spawnAtTime(timeline[i].t);
+};
+document.getElementById("prev").onclick = ()=>{
+  playing = false;
+  let i = cursor - 1;
+  while(i >= 0 && timeline[i].t >= clock) i--;
+  if(i < 0){ setClock(0); return; }
+  setClock(timeline[i].t);
+  spawnAtTime(timeline[i].t);
+};
+scrub.addEventListener("input", ()=>{ playing = false; setClock(+scrub.value); });
+
+const speedWrap = document.getElementById("speeds");
+[0.5,1,2,4].forEach(s=>{
+  const b = document.createElement("button");
+  b.className = "sp" + (s===1?" active":""); b.textContent = s+"×";
+  b.onclick = ()=>{ speed = s; lastReal = null;
+    speedWrap.querySelectorAll(".sp").forEach(x=>x.classList.toggle("active", x===b)); };
+  speedWrap.appendChild(b);
+});
+
+// keyboard: space = play/pause, arrows = step
+addEventListener("keydown", e=>{
+  if(e.code === "Space"){ e.preventDefault(); playBtn.onclick(); }
+  else if(e.code === "ArrowRight"){ e.preventDefault(); document.getElementById("next").onclick(); }
+  else if(e.code === "ArrowLeft"){ e.preventDefault(); document.getElementById("prev").onclick(); }
+});
+
+setClock(0);
+requestAnimationFrame(frame);
+</script>

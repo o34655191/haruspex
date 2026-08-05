@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scryer &mdash; Battle Autopsy Archive</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="wrap">
+    <div class="topbar">
+      <a class="back" href="index.html">&larr; Programs</a>
+      <h1>Scryer</h1>
+      <span class="sub">Project Haruspex &middot; Battle Autopsy Archive</span>
+      <span class="count" id="count"></span>
+    </div>
+
+    <ul class="archive" id="archive"></ul>
+  </main>
+
+  <!-- =====================================================================
+       REPORT INDEX
+       Add one entry per report you drop into reports/. Newest first.
+         title : shown big
+         date  : YYYY-MM-DD (shown in meta)
+         file  : path relative to this page, e.g. reports/xxxx.html
+         note  : short tag, e.g. "5v5 · 42s"  (optional)
+       No build step, no server needed — just edit this array and re-upload.
+       ==================================================================== -->
+  <script>
+    const REPORTS = [
+      { title: "Battle Autopsy — Sample",
+        date:  "2026-08-05",
+        file:  "reports/report1.html",
+        note:  "demo · 5v5" },
+    ];
+
+    const archive = document.getElementById("archive");
+    const countEl = document.getElementById("count");
+    countEl.textContent = REPORTS.length + (REPORTS.length === 1 ? " report" : " reports");
+
+    if (!REPORTS.length) {
+      archive.innerHTML =
+        '<li class="empty">No reports yet. Drop a generated .html into ' +
+        '<code>reports/</code> and add it to the list above.</li>';
+    } else {
+      const pad = n => String(n).padStart(3, "0");
+      REPORTS.forEach((r, i) => {
+        const a = document.createElement("a");
+        a.className = "report";
+        a.href = r.file;                       // relative link to the report
+        a.innerHTML =
+          '<span class="idx">' + pad(REPORTS.length - i) + '</span>' +
+          '<span class="body"><span class="title"></span>' +
+            '<span class="meta"></span></span>' +
+          '<span class="open">Open &rarr;</span>';
+        // textContent (not innerHTML) so titles/notes can't inject markup
+        a.querySelector(".title").textContent = r.title;
+        a.querySelector(".meta").textContent =
+          [r.date, r.note].filter(Boolean).join("   ·   ");
+        const li = document.createElement("li");
+        li.appendChild(a);
+        archive.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>

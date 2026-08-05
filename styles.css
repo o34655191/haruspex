@@ -1,0 +1,142 @@
+/* ===========================================================================
+   Haruspex — shared shell styles for the landing + scryer archive pages.
+   Palette + type mirror hindsight's replay report so the whole thing reads as
+   one product. Report pages (reports/*.html) are self-contained and do NOT
+   depend on this file.
+   ========================================================================== */
+:root{
+  color-scheme: dark;
+  --bg:#0b0e13; --panel:#141a23; --panel-2:#1b2330;
+  --line:#28323f; --line-soft:#1e2732;
+  --ink:#e8eef5; --ink-dim:#9db0c2; --ink-faint:#5f7285;
+  --mine:#43c6f0; --mine-soft:#93e2fb; --mine-bg:#0f2b39;
+  --enemy:#ff5d5d; --gold:#ffd166; --support:#c8b273;
+  --mono: ui-monospace,"Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  --sans: system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:var(--sans); color:var(--ink); background:var(--bg);
+  min-height:100vh; -webkit-font-smoothing:antialiased;
+}
+a{color:inherit; text-decoration:none}
+
+/* faint vignette so the flat dark has some depth */
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(80% 45% at 50% -8%, rgba(67,198,240,.07), transparent 62%),
+    radial-gradient(70% 45% at 50% 108%, rgba(255,93,93,.05), transparent 62%);
+}
+.wrap{
+  position:relative; z-index:1;
+  max-width:960px; margin:0 auto;
+  padding:clamp(26px,6vh,76px) clamp(16px,4vw,28px) 56px;
+}
+
+/* ---- shared header eyebrow/glyph ---- */
+.eyebrow{
+  font-family:var(--mono); font-size:11px; letter-spacing:.32em;
+  text-transform:uppercase; color:var(--ink-faint);
+}
+
+/* ===========================  LANDING  ==================================== */
+.hero{ text-align:center; margin:clamp(10px,5vh,48px) 0 clamp(28px,6vh,52px) }
+.hero .glyph{
+  font-size:30px; color:var(--mine); opacity:.85;
+  text-shadow:0 0 24px rgba(67,198,240,.4); margin-bottom:14px;
+}
+.hero h1{
+  font-size:clamp(22px,4vw,30px); font-weight:600; letter-spacing:.2em;
+  text-transform:uppercase; margin:10px 0 0;
+}
+.hero .tagline{
+  margin:12px auto 0; max-width:44ch;
+  font-size:13.5px; line-height:1.5; color:var(--ink-dim);
+}
+
+.programs{
+  display:grid; grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:clamp(12px,2.4vw,18px);
+}
+@media (max-width:620px){ .programs{grid-template-columns:1fr} }
+
+.program{
+  display:flex; flex-direction:column; gap:10px;
+  padding:22px 22px 20px; min-height:196px;
+  border:1px solid var(--line); border-radius:16px;
+  background:linear-gradient(180deg, var(--panel) 0%, #10151d 100%);
+  position:relative; overflow:hidden;
+  transition:border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+}
+.program .code{ font-family:var(--mono); font-size:10.5px; letter-spacing:.22em; color:var(--ink-faint); text-transform:uppercase }
+.program h2{ font-size:19px; font-weight:600; letter-spacing:.05em; margin:2px 0 0 }
+.program p{ font-size:13px; line-height:1.5; color:var(--ink-dim); margin:0 }
+.program .status{
+  margin-top:auto; align-self:flex-start;
+  font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  padding:4px 10px; border-radius:999px; border:1px solid var(--line);
+  color:var(--ink-faint);
+}
+
+/* live program = interactive card-link */
+.program.live{ cursor:pointer }
+.program.live h2{ color:var(--mine-soft) }
+.program.live .status{ color:var(--mine); border-color:rgba(67,198,240,.4); background:rgba(67,198,240,.07) }
+.program.live .status::before{ content:"● "; color:var(--mine) }
+.program.live:hover,
+.program.live:focus-visible{
+  border-color:var(--mine); transform:translateY(-2px);
+  box-shadow:0 10px 34px rgba(0,0,0,.45), 0 0 0 1px rgba(67,198,240,.15), 0 0 26px rgba(67,198,240,.14);
+  outline:none;
+}
+.program.live .arrow{ position:absolute; right:18px; bottom:18px; color:var(--mine); opacity:.55; transition:transform .16s ease, opacity .16s ease }
+.program.live:hover .arrow{ transform:translateX(3px); opacity:1 }
+
+/* locked program = inert, muted */
+.program.locked{ opacity:.5; cursor:not-allowed; background:linear-gradient(180deg,#0f141c,#0c1017) }
+.program.locked h2{ color:var(--ink-dim) }
+.program.locked .status::before{ content:"◌ " }
+
+.foot{
+  margin-top:34px; text-align:center;
+  font-family:var(--mono); font-size:11px; letter-spacing:.14em; color:var(--ink-faint);
+}
+
+/* ===========================  SCRYER  ==================================== */
+.topbar{
+  display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+  padding-bottom:16px; margin-bottom:20px; border-bottom:1px solid var(--line-soft);
+}
+.back{
+  font-family:var(--mono); font-size:12px; letter-spacing:.06em; color:var(--ink-faint);
+  transition:color .14s ease;
+}
+.back:hover{ color:var(--mine-soft) }
+.topbar h1{
+  font-size:16px; font-weight:600; letter-spacing:.16em; text-transform:uppercase; margin:0;
+}
+.topbar .sub{ font-family:var(--mono); font-size:12px; color:var(--ink-faint) }
+.topbar .count{ margin-left:auto; font-family:var(--mono); font-size:12px; color:var(--ink-faint) }
+
+.archive{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px }
+.report{
+  display:grid; grid-template-columns:52px 1fr auto; align-items:center; gap:14px;
+  padding:15px 18px; border:1px solid var(--line); border-radius:12px;
+  background:var(--panel); transition:border-color .14s ease, background .14s ease, transform .14s ease;
+}
+.report:hover,.report:focus-visible{
+  border-color:var(--mine); background:var(--panel-2); transform:translateX(2px); outline:none;
+}
+.report .idx{ font-family:var(--mono); font-size:12px; color:var(--ink-faint); text-align:right }
+.report .body .title{ font-size:15px; font-weight:600; color:var(--ink) }
+.report:hover .body .title{ color:var(--mine-soft) }
+.report .body .meta{ margin-top:3px; font-family:var(--mono); font-size:11.5px; color:var(--ink-faint); letter-spacing:.03em }
+.report .open{ font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--ink-faint) }
+.report:hover .open{ color:var(--mine) }
+
+.empty{
+  padding:40px 20px; text-align:center; color:var(--ink-faint);
+  border:1px dashed var(--line); border-radius:12px; font-size:13px;
+}
