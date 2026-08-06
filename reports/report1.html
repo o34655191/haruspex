@@ -506,6 +506,7 @@ function mitAt(u){
 // gating on cursor would freeze a stat at its boosted value past expiry. Cheap
 // (a few units × a few windows); DOM writes are guarded so unchanged cells don't
 // thrash layout. Gold = the value currently differs from its t=0 baseline.
+//test
 function updateLiveAttrs(){
   for(const u of BATTLE.units){
     const c = statCells[u.slot]; if(!c) continue;
