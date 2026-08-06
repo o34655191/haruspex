@@ -34,3 +34,4 @@ The pages in `reports/` are fully self-contained and do not use `styles.css`.
 Push to a **public** repo, then: repo **Settings → Pages → Build and deployment
 → Deploy from a branch → `main` / root**. The site goes live at
 `https://<user>.github.io/<repo>/` within a minute.
+change because github pages deploy failed
