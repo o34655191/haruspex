@@ -35,3 +35,4 @@ Push to a **public** repo, then: repo **Settings → Pages → Build and deploym
 → Deploy from a branch → `main` / root**. The site goes live at
 `https://<user>.github.io/<repo>/` within a minute.
 change because github pages deploy failed
+change because github pages deploy failed
