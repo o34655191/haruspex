@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaultBattle": "battle-435-vs-472",
+  "battles": [
+    {
+      "id": "battle-499-vs-495",
+      "title": "Server 499 vs 495",
+      "date": "2026-08-08",
+      "start": 1786195792724,
+      "duration": 3736989,
+      "events": 174407,
+      "marches": 95649,
+      "servers": [499, 495],
+      "note": "Capitol warzone"
+    },
+    {
+      "id": "battle-435-vs-472",
+      "title": "Server 435 vs 472",
+      "date": "2026-08-08",
+      "start": 1786195792584,
+      "duration": 3737121,
+      "events": 192426,
+      "marches": 107357,
+      "servers": [435, 472],
+      "note": "Capitol warzone"
+    }
+  ]
+}

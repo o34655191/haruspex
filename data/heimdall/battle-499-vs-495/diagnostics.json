@@ -1,0 +1,399 @@
+{
+  "version": 1,
+  "source": "2.ndjson",
+  "summary": {
+    "foldUpAtUnknownPosition": 34,
+    "inferredBasePlacements": 103,
+    "foldUpAtKnownBase": 4168,
+    "genericRemovePositions": 4649,
+    "pairedRelocations": 1509,
+    "pairedWithinOneSecond": 687,
+    "lateUnpairedReappearance": 803,
+    "overlapEvictions": 52,
+    "genericRemoveAtKnownBase": 27,
+    "sameActorMovedWithoutDeparture": 25,
+    "logicalBaseActors": 2476,
+    "actorsLinkedToMarchPlayers": 478,
+    "marchPlayers": 902,
+    "marchPlayersWithObservedBase": 478,
+    "unresolvedMarchPlayers": 424
+  },
+  "pointOperations": {
+    "foldUp": 4202,
+    "change": 47281,
+    "create": 3460,
+    "remove": 3945,
+    "relocate": 1821
+  },
+  "pointEntityKinds": {
+    "38": 1335,
+    "6": 47765,
+    "-1": 1308,
+    "7": 1833,
+    "21": 3,
+    "17": 923,
+    "11": 128
+  },
+  "semantics": {
+    "create": "observed player appearance",
+    "change": "observed player refresh in place",
+    "relocate": "observed player arrival",
+    "foldUp": "observed vacancy at an old player anchor",
+    "remove": "generic map-object removal; does not mutate player state",
+    "inferred": "march candidate confirmed by a later player point within five minutes"
+  },
+  "assumptions": [
+    "Only point entity type 6 is a player base.",
+    "The packed player point is the centre anchor of a 3x3 footprint.",
+    "foldUp alone does not distinguish voluntary and forced relocation.",
+    "This capture contains no world.get.block snapshot, so initial coverage is partial."
+  ],
+  "samples": {
+    "genericRemoveAtPlayer": [
+      {
+        "time": 1073425,
+        "position": 558516,
+        "actors": [
+          601
+        ]
+      },
+      {
+        "time": 1839203,
+        "position": 556490,
+        "actors": [
+          601
+        ]
+      },
+      {
+        "time": 2132040,
+        "position": 468490,
+        "actors": [
+          1173
+        ]
+      },
+      {
+        "time": 2212171,
+        "position": 545495,
+        "actors": [
+          1246
+        ]
+      },
+      {
+        "time": 2223541,
+        "position": 495524,
+        "actors": [
+          1297
+        ]
+      },
+      {
+        "time": 2826042,
+        "position": 500467,
+        "actors": [
+          1863
+        ]
+      },
+      {
+        "time": 2840185,
+        "position": 512473,
+        "actors": [
+          1816
+        ]
+      },
+      {
+        "time": 2924908,
+        "position": 487533,
+        "actors": [
+          1875
+        ]
+      },
+      {
+        "time": 2983982,
+        "position": 495540,
+        "actors": [
+          1722
+        ]
+      },
+      {
+        "time": 3012457,
+        "position": 512464,
+        "actors": [
+          1867
+        ]
+      },
+      {
+        "time": 3037293,
+        "position": 485478,
+        "actors": [
+          1797
+        ]
+      },
+      {
+        "time": 3108982,
+        "position": 506454,
+        "actors": [
+          1670
+        ]
+      },
+      {
+        "time": 3137757,
+        "position": 532532,
+        "actors": [
+          2018
+        ]
+      },
+      {
+        "time": 3194020,
+        "position": 487512,
+        "actors": [
+          2127
+        ]
+      },
+      {
+        "time": 3200219,
+        "position": 444500,
+        "actors": [
+          601
+        ]
+      },
+      {
+        "time": 3257992,
+        "position": 465493,
+        "actors": [
+          1986
+        ]
+      },
+      {
+        "time": 3294076,
+        "position": 510530,
+        "actors": [
+          2077
+        ]
+      },
+      {
+        "time": 3400431,
+        "position": 481533,
+        "actors": [
+          1976
+        ]
+      },
+      {
+        "time": 3405018,
+        "position": 504540,
+        "actors": [
+          1890
+        ]
+      },
+      {
+        "time": 3423066,
+        "position": 475512,
+        "actors": [
+          2227
+        ]
+      }
+    ],
+    "overlapEvictions": [
+      {
+        "time": 1060255,
+        "position": 558516,
+        "evicted": 559514
+      },
+      {
+        "time": 1060255,
+        "position": 558516,
+        "evicted": 559518
+      },
+      {
+        "time": 1060255,
+        "position": 558516,
+        "evicted": 556517
+      },
+      {
+        "time": 1292692,
+        "position": 530503,
+        "evicted": 530503
+      },
+      {
+        "time": 1295019,
+        "position": 556517,
+        "evicted": 558516
+      },
+      {
+        "time": 1296961,
+        "position": 478515,
+        "evicted": 478515
+      },
+      {
+        "time": 1417449,
+        "position": 499515,
+        "evicted": 497515
+      },
+      {
+        "time": 1422401,
+        "position": 449506,
+        "evicted": 449505
+      },
+      {
+        "time": 1592520,
+        "position": 511515,
+        "evicted": 511515
+      },
+      {
+        "time": 1791867,
+        "position": 553525,
+        "evicted": 553525
+      },
+      {
+        "time": 1824177,
+        "position": 556490,
+        "evicted": 558488
+      },
+      {
+        "time": 2132053,
+        "position": 468490,
+        "evicted": 468490
+      },
+      {
+        "time": 2147693,
+        "position": 492515,
+        "evicted": 492515
+      },
+      {
+        "time": 2212187,
+        "position": 545496,
+        "evicted": 545495
+      },
+      {
+        "time": 2223559,
+        "position": 495524,
+        "evicted": 495524
+      },
+      {
+        "time": 2226922,
+        "position": 532485,
+        "evicted": 532485
+      },
+      {
+        "time": 2756681,
+        "position": 478535,
+        "evicted": 478535
+      },
+      {
+        "time": 2826056,
+        "position": 500467,
+        "evicted": 500467
+      },
+      {
+        "time": 2831815,
+        "position": 485518,
+        "evicted": 485518
+      },
+      {
+        "time": 2835483,
+        "position": 501525,
+        "evicted": 501525
+      }
+    ],
+    "pairedRelocations": [
+      {
+        "departed": 413199,
+        "arrived": 434094,
+        "delayMs": 20895
+      },
+      {
+        "departed": 437421,
+        "arrived": 437427,
+        "delayMs": 6
+      },
+      {
+        "departed": 440225,
+        "arrived": 440227,
+        "delayMs": 2
+      },
+      {
+        "departed": 440589,
+        "arrived": 440589,
+        "delayMs": 0
+      },
+      {
+        "departed": 397978,
+        "arrived": 452020,
+        "delayMs": 54042
+      },
+      {
+        "departed": 428588,
+        "arrived": 465511,
+        "delayMs": 36923
+      },
+      {
+        "departed": 473243,
+        "arrived": 473249,
+        "delayMs": 6
+      },
+      {
+        "departed": 475057,
+        "arrived": 475058,
+        "delayMs": 1
+      },
+      {
+        "departed": 404946,
+        "arrived": 479275,
+        "delayMs": 74329
+      },
+      {
+        "departed": 484493,
+        "arrived": 484503,
+        "delayMs": 10
+      },
+      {
+        "departed": 437631,
+        "arrived": 493091,
+        "delayMs": 55460
+      },
+      {
+        "departed": 448730,
+        "arrived": 498136,
+        "delayMs": 49406
+      },
+      {
+        "departed": 502000,
+        "arrived": 502003,
+        "delayMs": 3
+      },
+      {
+        "departed": 502352,
+        "arrived": 502354,
+        "delayMs": 2
+      },
+      {
+        "departed": 464571,
+        "arrived": 509573,
+        "delayMs": 45002
+      },
+      {
+        "departed": 420205,
+        "arrived": 510757,
+        "delayMs": 90552
+      },
+      {
+        "departed": 512418,
+        "arrived": 512420,
+        "delayMs": 2
+      },
+      {
+        "departed": 468272,
+        "arrived": 512972,
+        "delayMs": 44700
+      },
+      {
+        "departed": 428968,
+        "arrived": 517521,
+        "delayMs": 88553
+      },
+      {
+        "departed": 520718,
+        "arrived": 520719,
+        "delayMs": 1
+      }
+    ]
+  }
+}

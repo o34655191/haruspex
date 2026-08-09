@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Choose a recorded Last War world-map battle to replay in Project Heimdall.">
+<title>Heimdall — The All-Seeing One</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="heimdall-battles.css">
+</head>
+<body class="watch-page">
+  <main class="watch-shell">
+    <nav class="watch-nav" aria-label="Breadcrumb">
+      <a class="back" href="index.html">&larr; Programs</a>
+      <span id="battleCount" role="status">Loading watches…</span>
+    </nav>
+
+    <header class="watch-hero">
+      <div class="watch-mark" aria-hidden="true"><span></span></div>
+      <div class="eyebrow">Project Heimdall</div>
+      <h1>The All-Seeing One</h1>
+      <p>No march passes unseen. Choose a recorded warzone and enter the watch.</p>
+    </header>
+
+    <section class="watch-archive" aria-labelledby="archiveTitle">
+      <div class="watch-heading">
+        <div>
+          <div class="eyebrow">World observation archive</div>
+          <h2 id="archiveTitle">Recorded battles</h2>
+        </div>
+        <span>Choose a watch</span>
+      </div>
+      <ol class="battle-list" id="battleList">
+        <li class="battle-loading">Reading the archive…</li>
+      </ol>
+    </section>
+
+    <footer class="watch-foot">Every base. Every march. Every turn.</footer>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+      const list = document.getElementById("battleList");
+      const count = document.getElementById("battleCount");
+      const number = value => Number(value).toLocaleString();
+      const duration = ms => {
+        const minutes = Math.floor(ms / 60000);
+        return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+      };
+
+      function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      fetch("data/heimdall/battles.json")
+        .then(response => {
+          if (!response.ok) throw new Error(`archive HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(catalog => {
+          list.replaceChildren();
+          count.textContent = `${catalog.battles.length} recorded ${catalog.battles.length === 1 ? "battle" : "battles"}`;
+          catalog.battles.forEach((battle, index) => {
+            const item = element("li");
+            const link = element("a", "battle-card");
+            link.href = `heimdall.html?battle=${encodeURIComponent(battle.id)}`;
+
+            link.append(element("span", "battle-index", `WATCH ${String(catalog.battles.length - index).padStart(2, "0")}`));
+            const body = element("span", "battle-body");
+            const heading = element("span", "battle-title");
+            heading.append(element("strong", "", battle.title), element("em", "", battle.note));
+            body.append(heading);
+
+            const sides = element("span", "battle-sides");
+            sides.append(
+              element("span", "server-side side-a", `S${battle.servers[0]}`),
+              element("span", "versus", "VS"),
+              element("span", "server-side side-b", `S${battle.servers[1]}`),
+            );
+            body.append(sides);
+
+            const meta = element("span", "battle-meta");
+            meta.append(
+              element("span", "", battle.date),
+              element("span", "", duration(battle.duration)),
+              element("span", "", `${number(battle.events)} events`),
+              element("span", "", `${number(battle.marches)} marches`),
+            );
+            body.append(meta);
+            link.append(body, element("span", "battle-open", "Enter watch →"));
+            item.append(link);
+            list.append(item);
+          });
+        })
+        .catch(error => {
+          console.error(error);
+          count.textContent = "Archive unavailable";
+          list.replaceChildren(element("li", "battle-loading error", "The observation archive could not be loaded. Serve this folder over HTTP and try again."));
+        });
+    })();
+  </script>
+</body>
+</html>
