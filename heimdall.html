@@ -21,7 +21,7 @@
     </header>
 
     <section class="replay-stage" aria-label="Interactive world map replay">
-      <canvas id="map" tabindex="0" aria-label="World map. Drag to pan, use the wheel to zoom, and click a march or base for details."></canvas>
+      <canvas id="map" tabindex="0" aria-label="World map. Drag to pan, pinch or use the zoom controls to zoom, and tap a march or base for details."></canvas>
       <div class="map-key" aria-hidden="true">
         <span><i class="key-base"></i>Observed base</span>
         <span><i class="key-inferred"></i>Inferred</span>
@@ -30,7 +30,11 @@
         <span><i class="key-capitol"></i>Capitol</span>
         <span><i class="key-blocked"></i>No teleport</span>
       </div>
-      <div class="map-help">Drag to pan · Wheel to zoom · Click for details</div>
+      <div class="map-help">Drag to pan · Wheel or pinch to zoom · Click for details</div>
+      <div class="map-zoom" aria-label="Map zoom controls">
+        <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+        <button id="zoomOut" type="button" aria-label="Zoom out">&minus;</button>
+      </div>
       <div class="map-compass" aria-label="Map orientation: north is up, south is down">
         <span>N</span><i aria-hidden="true"></i><span>S</span>
       </div>

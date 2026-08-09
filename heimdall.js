@@ -8,7 +8,7 @@
     "loadState", "play", "playIcon", "clock", "elapsed", "timeline", "speed",
     "activeMarches", "visibleBases", "confirmedBases", "inferredBases", "eventCount",
     "showBases", "showInferred", "showRoutes", "showLabels", "showCapitol", "serverFilter",
-    "resetView", "colorMode", "sideControls", "sideAServer", "sideBServer",
+    "resetView", "zoomIn", "zoomOut", "colorMode", "sideControls", "sideAServer", "sideBServer",
     "sideAColor", "sideBColor", "highlightAlliance", "highlightColor",
     "inspector", "closeInspector",
     "inspectorKind", "inspectorTitle", "inspectorDetails", "battleTitle",
@@ -29,6 +29,8 @@
   let redrawNeeded = true;
   let camera = { x: 500, y: 500, zoom: 1 };
   let pointer = null;
+  const activePointers = new Map();
+  let pinch = null;
   let highlightAllianceGroups = new Map();
 
   // Capture-verified Warzone layout. March targets place the sanctuary at
@@ -260,6 +262,21 @@
       zoom: clamp(Math.min(width, height) / capitolViewSpan, .75, 8),
     };
     redrawNeeded = true;
+  }
+
+  function zoomAt(x, y, nextZoom) {
+    const { width, height } = screenSize();
+    const before = toWorld(x, y, width, height);
+    camera.zoom = clamp(nextZoom, .25, 20);
+    const after = toWorld(x, y, width, height);
+    camera.x += before.x - after.x;
+    camera.y += before.y - after.y;
+    redrawNeeded = true;
+  }
+
+  function zoomFromCenter(factor) {
+    const { width, height } = screenSize();
+    zoomAt(width / 2, height / 2, camera.zoom * factor);
   }
 
   function drawGrid(width, height) {
@@ -689,6 +706,8 @@
   });
   ui.closeInspector.addEventListener("click", () => { ui.inspector.hidden = true; });
   ui.resetView.addEventListener("click", resetView);
+  ui.zoomIn.addEventListener("click", () => zoomFromCenter(1.45));
+  ui.zoomOut.addEventListener("click", () => zoomFromCenter(1 / 1.45));
   for (const control of [ui.showBases, ui.showInferred, ui.showRoutes, ui.showLabels, ui.showCapitol, ui.serverFilter]) {
     control.addEventListener("change", () => { redrawNeeded = true; });
   }
@@ -700,12 +719,51 @@
     control.addEventListener("input", () => { redrawNeeded = true; });
   }
 
+  function beginPinch() {
+    const [first, second] = [...activePointers.values()];
+    if (!first || !second) return;
+    const rect = canvas.getBoundingClientRect();
+    const { width, height } = screenSize();
+    const x = (first.x + second.x) / 2 - rect.left;
+    const y = (first.y + second.y) / 2 - rect.top;
+    pinch = {
+      distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+      zoom: camera.zoom,
+      world: toWorld(x, y, width, height),
+    };
+    if (pointer) pointer.moved = true;
+  }
+
   canvas.addEventListener("pointerdown", event => {
+    if (activePointers.size >= 2) return;
     canvas.setPointerCapture(event.pointerId);
-    pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    activePointers.set(event.pointerId, { id: event.pointerId, x: event.clientX, y: event.clientY });
+    if (activePointers.size === 1) {
+      pointer = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    } else if (activePointers.size === 2) {
+      beginPinch();
+    }
     canvas.classList.add("dragging");
   });
   canvas.addEventListener("pointermove", event => {
+    if (!activePointers.has(event.pointerId)) return;
+    activePointers.set(event.pointerId, { id: event.pointerId, x: event.clientX, y: event.clientY });
+
+    if (pinch && activePointers.size >= 2) {
+      const [first, second] = [...activePointers.values()];
+      const rect = canvas.getBoundingClientRect();
+      const { width, height } = screenSize();
+      const x = (first.x + second.x) / 2 - rect.left;
+      const y = (first.y + second.y) / 2 - rect.top;
+      const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
+      camera.zoom = clamp(pinch.zoom * distance / pinch.distance, .25, 20);
+      const after = toWorld(x, y, width, height);
+      camera.x += pinch.world.x - after.x;
+      camera.y += pinch.world.y - after.y;
+      redrawNeeded = true;
+      return;
+    }
+
     if (!pointer || pointer.id !== event.pointerId) return;
     const dx = event.clientX - pointer.x;
     const dy = event.clientY - pointer.y;
@@ -716,9 +774,25 @@
     pointer.y = event.clientY;
     redrawNeeded = true;
   });
-  canvas.addEventListener("pointerup", event => {
-    if (!pointer || pointer.id !== event.pointerId) return;
-    if (!pointer.moved) {
+
+  function finishPointer(event, inspectTap) {
+    if (!activePointers.has(event.pointerId)) return;
+    activePointers.delete(event.pointerId);
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+
+    if (pinch) {
+      pinch = null;
+      const remaining = activePointers.values().next().value;
+      pointer = remaining ? { ...remaining, moved: true } : null;
+      if (!remaining) canvas.classList.remove("dragging");
+      return;
+    }
+
+    if (!pointer || pointer.id !== event.pointerId) {
+      if (!activePointers.size) canvas.classList.remove("dragging");
+      return;
+    }
+    if (inspectTap && !pointer.moved) {
       const rect = canvas.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
@@ -731,21 +805,19 @@
       if (best) inspect(best);
       else ui.inspector.hidden = true;
     }
-    pointer = null;
-    canvas.classList.remove("dragging");
-  });
+    const remaining = activePointers.values().next().value;
+    pointer = remaining ? { ...remaining, moved: true } : null;
+    if (!remaining) canvas.classList.remove("dragging");
+  }
+
+  canvas.addEventListener("pointerup", event => finishPointer(event, true));
+  canvas.addEventListener("pointercancel", event => finishPointer(event, false));
   canvas.addEventListener("wheel", event => {
     event.preventDefault();
     const rect = canvas.getBoundingClientRect();
-    const { width, height } = screenSize();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
-    const before = toWorld(x, y, width, height);
-    camera.zoom = clamp(camera.zoom * Math.exp(-event.deltaY * .001), .25, 20);
-    const after = toWorld(x, y, width, height);
-    camera.x += before.x - after.x;
-    camera.y += before.y - after.y;
-    redrawNeeded = true;
+    zoomAt(x, y, camera.zoom * Math.exp(-event.deltaY * .001));
   }, { passive: false });
 
   document.addEventListener("keydown", event => {

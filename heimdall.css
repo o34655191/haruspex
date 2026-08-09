@@ -21,6 +21,10 @@
 .key-capitol{border:1px solid #7ce1ff;background:rgba(124,225,255,.08)}
 .key-blocked{border:1px solid #ff6174;background:rgba(255,69,91,.2)}
 .map-help{right:12px;bottom:12px;padding:7px 9px;border-radius:7px}
+.map-zoom{position:absolute;z-index:3;left:12px;bottom:12px;display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(40,50,63,.9);border-radius:9px;background:rgba(8,11,16,.88);box-shadow:0 8px 24px rgba(0,0,0,.28)}
+.map-zoom button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;background:transparent;color:var(--ink-dim);font:22px/1 var(--mono);cursor:pointer}
+.map-zoom button+button{border-top:1px solid rgba(40,50,63,.9)}
+.map-zoom button:hover,.map-zoom button:focus-visible{background:var(--mine-bg);color:var(--mine-soft);outline:none}
 .map-compass{position:absolute;z-index:2;right:14px;top:14px;display:grid;justify-items:center;gap:3px;color:var(--ink-dim);font:10px var(--mono);pointer-events:none;text-shadow:0 1px 4px #000}
 .map-compass i{display:block;width:1px;height:31px;background:linear-gradient(var(--mine),var(--line));position:relative}
 .map-compass i::before{content:"";position:absolute;left:-3px;top:-1px;border-left:3.5px solid transparent;border-right:3.5px solid transparent;border-bottom:6px solid var(--mine)}
@@ -71,6 +75,7 @@
   .side-controls{width:100%}.color-choice{flex:1}.color-choice select{width:100%}
   .map-key{right:12px;flex-wrap:wrap;gap:7px 11px}
   .map-help{display:none}
+  .map-zoom button{width:44px;height:44px;font-size:25px}
   .map-compass{right:8px;top:76px}
 }
 
