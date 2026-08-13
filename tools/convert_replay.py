@@ -20,6 +20,9 @@ from typing import Any
 MARCH_NEW = "push.world.march.new"
 MARCH_DEL = "push.world.march.del"
 POINT_UPDATE = "push.world.point.update"
+THRONE_SCORE = "get.server.throne.occupy.score"
+
+CAPTURE_TARGET = 720_000
 
 # Base event operations consumed by heimdall.js.
 BASE_CREATE = 0
@@ -79,6 +82,35 @@ def as_dict(value: Any) -> dict[str, Any]:
     if isinstance(value, list):
         return next((item for item in value if isinstance(item, dict)), {})
     return {}
+
+
+def as_list(value: Any) -> list[Any]:
+    if isinstance(value, list):
+        return value
+    return [] if value is None else [value]
+
+
+def capture_sample(fields: dict[str, Any], event_time: int) -> list[int] | None:
+    """Return the two server-wide capitol build totals from a score response.
+
+    The decoder flattens the server summary and following alliance rows into
+    parallel arrays. The first two server IDs are the opposing server totals;
+    buildPoint/buildSpeed contain exactly those two server-wide values.
+    """
+    server_ids = as_list(fields.get("serverId"))
+    build_points = as_list(fields.get("buildPoint"))
+    build_speeds = as_list(fields.get("buildSpeed"))
+    if len(server_ids) < 2 or len(build_points) < 2:
+        return None
+    return [
+        event_time,
+        as_int(server_ids[0]),
+        as_int(build_points[0]),
+        as_int(build_speeds[0]) if build_speeds else 0,
+        as_int(server_ids[1]),
+        as_int(build_points[1]),
+        as_int(build_speeds[1]) if len(build_speeds) > 1 else 0,
+    ]
 
 
 def normalise(value: Any) -> str:
@@ -388,6 +420,7 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
     players: list[list[Any]] = []
     bases: list[list[Any]] = []
     events: list[list[Any]] = []
+    capture_samples: list[list[int]] = []
     point_operations: Counter[str] = Counter()
     entity_kinds: Counter[str] = Counter()
     counts = {
@@ -395,6 +428,7 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
         "deletions": 0,
         "baseUpdates": 0,
         "genericRemovals": 0,
+        "captureSamples": 0,
         "skipped": 0,
     }
     start = end = None
@@ -565,6 +599,12 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
                     )
                     counts["baseUpdates"] += 1
 
+            elif route == THRONE_SCORE:
+                sample = capture_sample(fields, event_time)
+                if sample is not None:
+                    capture_samples.append(sample)
+                    counts["captureSamples"] += 1
+
             if line_number % 100_000 == 0:
                 print(f"read {line_number:,} records", flush=True)
 
@@ -635,6 +675,10 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
         "baseIds": base_ids.values,
         "baseInstances": instance_actors,
         "baseActors": actors,
+        "captureProgress": {
+            "target": CAPTURE_TARGET,
+            "samples": capture_samples,
+        },
     }
     with (output / "manifest.json").open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))

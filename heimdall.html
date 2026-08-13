@@ -46,6 +46,32 @@
       </aside>
     </section>
 
+    <section class="capture-progress" id="captureProgress" aria-labelledby="captureTitle" hidden>
+      <div class="capture-heading">
+        <div>
+          <div class="eyebrow">Capitol occupation</div>
+          <h2 id="captureTitle">Capture progress</h2>
+        </div>
+        <span id="captureStatus">Awaiting occupation</span>
+      </div>
+      <div class="capture-bars">
+        <div class="capture-row" id="captureRowA">
+          <span class="capture-server" id="captureServerA">S---</span>
+          <div class="capture-track" id="captureTrackA" role="progressbar" aria-label="First server capture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i id="captureFillA"></i>
+          </div>
+          <strong id="captureValueA">0%</strong>
+        </div>
+        <div class="capture-row" id="captureRowB">
+          <span class="capture-server" id="captureServerB">S---</span>
+          <div class="capture-track" id="captureTrackB" role="progressbar" aria-label="Second server capture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i id="captureFillB"></i>
+          </div>
+          <strong id="captureValueB">0%</strong>
+        </div>
+      </div>
+    </section>
+
     <section class="transport" aria-label="Replay controls">
       <div class="transport-main">
         <button class="play" id="play" type="button" aria-label="Play replay" disabled>

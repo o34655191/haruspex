@@ -10,6 +10,9 @@
     "showBases", "showInferred", "showRoutes", "showLabels", "showCapitol", "serverFilter",
     "resetView", "zoomIn", "zoomOut", "colorMode", "sideControls", "sideAServer", "sideBServer",
     "sideAColor", "sideBColor", "highlightAlliance", "highlightColor",
+    "captureProgress", "captureStatus", "captureRowA", "captureRowB",
+    "captureServerA", "captureServerB", "captureTrackA", "captureTrackB",
+    "captureFillA", "captureFillB", "captureValueA", "captureValueB",
     "inspector", "closeInspector",
     "inspectorKind", "inspectorTitle", "inspectorDetails", "battleTitle",
   ].map(id => [id, document.getElementById(id)]));
@@ -186,6 +189,67 @@
     }
   }
 
+  function capturePoint(server, sample) {
+    if (!sample) return 0;
+    if (sample[1] === server) return sample[2];
+    if (sample[4] === server) return sample[5];
+    return 0;
+  }
+
+  function capturePointAt(server, time) {
+    const samples = manifest.captureProgress?.samples || [];
+    if (!samples.length || time < samples[0][0]) return 0;
+    let low = 0;
+    let high = samples.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (samples[middle][0] <= time) low = middle + 1;
+      else high = middle;
+    }
+    const previous = samples[Math.max(0, low - 1)];
+    const next = samples[low];
+    const from = capturePoint(server, previous);
+    if (!next || next[0] <= previous[0]) return from;
+    const to = capturePoint(server, next);
+    const ratio = clamp((time - previous[0]) / (next[0] - previous[0]), 0, 1);
+    return from + (to - from) * ratio;
+  }
+
+  function captureColor(server) {
+    if (String(server) === ui.sideAServer.value) return ui.sideAColor.value;
+    if (String(server) === ui.sideBServer.value) return ui.sideBColor.value;
+    return colorFor(server);
+  }
+
+  function updateCaptureReadout() {
+    const data = manifest.captureProgress;
+    const servers = battle?.servers || [];
+    if (!data?.samples?.length || servers.length < 2) {
+      ui.captureProgress.hidden = true;
+      return;
+    }
+    ui.captureProgress.hidden = false;
+    let complete = false;
+    let active = false;
+    [["A", servers[0]], ["B", servers[1]]].forEach(([suffix, server]) => {
+      const point = capturePointAt(server, currentTime);
+      const percent = clamp(point / data.target * 100, 0, 100);
+      const rounded = Math.round(percent);
+      const row = ui[`captureRow${suffix}`];
+      const label = ui[`captureServer${suffix}`];
+      const track = ui[`captureTrack${suffix}`];
+      label.textContent = `S${server}`;
+      row.style.setProperty("--capture-color", captureColor(server));
+      ui[`captureFill${suffix}`].style.width = `${percent}%`;
+      ui[`captureValue${suffix}`].textContent = `${rounded}%`;
+      track.setAttribute("aria-label", `Server ${server} capture progress`);
+      track.setAttribute("aria-valuenow", String(rounded));
+      complete ||= percent >= 100;
+      active ||= point > 0;
+    });
+    ui.captureStatus.textContent = complete ? "Capture complete" : active ? "Building control" : "Awaiting occupation";
+  }
+
   function rebuildState(time) {
     activeMarches = new Map();
     bases = new Map();
@@ -226,6 +290,7 @@
     ui.confirmedBases.textContent = observed.toLocaleString();
     ui.inferredBases.textContent = inferred.toLocaleString();
     ui.eventCount.textContent = eventIndex.toLocaleString();
+    updateCaptureReadout();
   }
 
   function resizeCanvas() {
@@ -693,6 +758,7 @@
 
   function updatePaletteControls() {
     ui.sideControls.hidden = ui.colorMode.value !== "server";
+    if (manifest) updateCaptureReadout();
     redrawNeeded = true;
   }
 

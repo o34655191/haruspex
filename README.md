@@ -30,7 +30,8 @@ python tools/convert_replay.py C:\path\to\capture.ndjson data\heimdall\battle-id
 ```
 
 The converter keeps marches (including speed in tiles per second), direction updates, march deletions and a
-player-aware base timeline. Only map entity type 6 is treated as a player;
+player-aware base timeline. It also preserves capitol occupation snapshots so
+the two server progress bars stay synchronized with playback. Only map entity type 6 is treated as a player;
 generic `remove` messages for mines, farms, rubble and other entities cannot
 move a base. Changing map-point IDs are merged into logical players, and a
 march-derived base is emitted only when a later point update confirms it.

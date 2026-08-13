@@ -37,6 +37,18 @@
 .inspector dt{color:var(--ink-faint)}
 .inspector dd{margin:0;color:var(--ink);text-align:right;overflow-wrap:anywhere}
 
+.capture-progress{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(135deg,rgba(20,26,35,.96),rgba(11,16,23,.96));box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.capture-progress[hidden]{display:none}
+.capture-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:10px}
+.capture-heading h2{margin:3px 0 0;font-size:13px;line-height:1.2;letter-spacing:.08em;text-transform:uppercase}
+.capture-heading>span{font:10px var(--mono);color:var(--ink-faint)}
+.capture-bars{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.capture-row{--capture-color:var(--mine);display:grid;grid-template-columns:50px minmax(80px,1fr) 44px;align-items:center;gap:9px;font-family:var(--mono)}
+.capture-server{font-size:12px;font-weight:650;color:var(--capture-color)}
+.capture-track{height:12px;overflow:hidden;border:1px solid rgba(129,148,167,.25);border-radius:999px;background:#080c12;box-shadow:inset 0 2px 5px rgba(0,0,0,.45)}
+.capture-track i{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,color-mix(in srgb,var(--capture-color) 68%,#101820),var(--capture-color));box-shadow:0 0 13px color-mix(in srgb,var(--capture-color) 65%,transparent);transition:width .12s linear}
+.capture-row strong{font-size:12px;font-weight:600;text-align:right;color:var(--ink-dim)}
+
 .transport{margin-top:12px;border:1px solid var(--line);border-radius:13px;background:var(--panel);padding:12px 14px}
 .transport-main{display:grid;grid-template-columns:42px 105px 1fr auto auto;align-items:center;gap:12px}
 .play{width:40px;height:40px;border:1px solid rgba(67,198,240,.45);border-radius:50%;background:var(--mine-bg);color:var(--mine-soft);cursor:pointer;font-size:15px}
@@ -73,10 +85,11 @@
   .filters label[for="serverFilter"]{margin-left:0}
   .palette-panel label[for="highlightAlliance"]{margin-left:0}
   .side-controls{width:100%}.color-choice{flex:1}.color-choice select{width:100%}
+  .capture-bars{grid-template-columns:1fr;gap:9px}.capture-heading{align-items:center}.capture-row{grid-template-columns:48px minmax(80px,1fr) 42px}
   .map-key{right:12px;flex-wrap:wrap;gap:7px 11px}
   .map-help{display:none}
   .map-zoom button{width:44px;height:44px;font-size:25px}
   .map-compass{right:8px;top:76px}
 }
 
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.program{transition:none}}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.program,.capture-track i{transition:none}}
