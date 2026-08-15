@@ -3,6 +3,17 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "472final",
+      "title": "Server 472 vs 499",
+      "date": "2026-08-15",
+      "start": 1786799849143,
+      "duration": 6829457,
+      "events": 395330,
+      "marches": 224769,
+      "servers": [472, 499],
+      "note": "Capitol warzone"
+    },
+    {
       "id": "battle-499-vs-495",
       "title": "Server 499 vs 495",
       "date": "2026-08-08",

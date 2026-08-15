@@ -624,7 +624,12 @@
       const catalogResponse = await fetch(CATALOG_URL);
       if (!catalogResponse.ok) throw new Error(`battle archive HTTP ${catalogResponse.status}`);
       const catalog = await catalogResponse.json();
-      const requestedBattle = new URLSearchParams(location.search).get("battle");
+      const queryBattle = new URLSearchParams(location.search).get("battle");
+      const pageBattle = decodeURIComponent(location.pathname.split("/").pop() || "")
+        .replace(/\.html$/i, "");
+      const requestedBattle = queryBattle || (
+        catalog.battles.some(item => item.id === pageBattle) ? pageBattle : ""
+      );
       battleId = requestedBattle || catalog.defaultBattle;
       battle = catalog.battles.find(item => item.id === battleId);
       if (!battle) throw new Error(`unknown battle ${battleId}`);
