@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "source": "476final.ndjson",
+  "summary": {
+    "foldUpAtUnknownPosition": 15,
+    "genericRemovePositions": 29,
+    "foldUpAtKnownBase": 3,
+    "inferredBasePlacements": 4,
+    "sameActorMovedWithoutDeparture": 4,
+    "pairedRelocations": 1,
+    "pairedWithinOneSecond": 1,
+    "logicalBaseActors": 68,
+    "actorsLinkedToMarchPlayers": 7,
+    "marchPlayers": 136,
+    "marchPlayersWithObservedBase": 7,
+    "unresolvedMarchPlayers": 129
+  },
+  "pointOperations": {
+    "change": 139,
+    "foldUp": 18,
+    "relocate": 8,
+    "remove": 16,
+    "create": 2
+  },
+  "pointEntityKinds": {
+    "6": 118,
+    "38": 2,
+    "7": 25,
+    "-1": 5
+  },
+  "semantics": {
+    "create": "observed player appearance",
+    "change": "observed player refresh in place",
+    "relocate": "observed player arrival",
+    "foldUp": "observed vacancy at an old player anchor",
+    "remove": "generic map-object removal; does not mutate player state",
+    "inferred": "march candidate confirmed by a later player point within five minutes"
+  },
+  "assumptions": [
+    "Only point entity type 6 is a player base.",
+    "The packed player point is the centre anchor of a 3x3 footprint.",
+    "foldUp alone does not distinguish voluntary and forced relocation.",
+    "This capture contains no world.get.block snapshot, so initial coverage is partial."
+  ],
+  "samples": {
+    "genericRemoveAtPlayer": [],
+    "overlapEvictions": [],
+    "pairedRelocations": [
+      {
+        "departed": 5058243,
+        "arrived": 5058245,
+        "delayMs": 2
+      }
+    ]
+  }
+}

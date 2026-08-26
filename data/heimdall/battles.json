@@ -14,6 +14,28 @@
       "note": "Capitol warzone"
     },
     {
+      "id": "474final",
+      "title": "Server 474 vs 545",
+      "date": "2026-08-15",
+      "start": 1786800119768,
+      "duration": 6073626,
+      "events": 260859,
+      "marches": 151359,
+      "servers": [474, 545],
+      "note": "Capitol warzone"
+    },
+    {
+      "id": "476final",
+      "title": "Server 476 vs 464",
+      "date": "2026-08-15",
+      "start": 1786799850810,
+      "duration": 5066606,
+      "events": 1398,
+      "marches": 793,
+      "servers": [476, 464],
+      "note": "Warzone replay"
+    },
+    {
       "id": "battle-499-vs-495",
       "title": "Server 499 vs 495",
       "date": "2026-08-08",
