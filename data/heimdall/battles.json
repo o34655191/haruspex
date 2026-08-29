@@ -3,6 +3,19 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "central-area-3v5",
+      "href": "central-area-3v5.html",
+      "title": "Central Area · 3 vs 5",
+      "date": "2026-08-29",
+      "start": 1788010408105,
+      "duration": 5195818,
+      "events": 412767,
+      "marches": 306171,
+      "servers": [316, 337],
+      "sideLabels": ["DEF · 3 servers", "ATK · 5 servers"],
+      "note": "World 8048 · Central Area"
+    },
+    {
       "id": "472final",
       "title": "Server 472 vs 499",
       "date": "2026-08-15",

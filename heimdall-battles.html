@@ -68,7 +68,7 @@
           catalog.battles.forEach((battle, index) => {
             const item = element("li");
             const link = element("a", "battle-card");
-            link.href = `heimdall.html?battle=${encodeURIComponent(battle.id)}`;
+            link.href = battle.href || `heimdall.html?battle=${encodeURIComponent(battle.id)}`;
 
             link.append(element("span", "battle-index", `WATCH ${String(catalog.battles.length - index).padStart(2, "0")}`));
             const body = element("span", "battle-body");
@@ -78,9 +78,9 @@
 
             const sides = element("span", "battle-sides");
             sides.append(
-              element("span", "server-side side-a", `S${battle.servers[0]}`),
+              element("span", "server-side side-a", battle.sideLabels?.[0] || `S${battle.servers[0]}`),
               element("span", "versus", "VS"),
-              element("span", "server-side side-b", `S${battle.servers[1]}`),
+              element("span", "server-side side-b", battle.sideLabels?.[1] || `S${battle.servers[1]}`),
             );
             body.append(sides);
 
