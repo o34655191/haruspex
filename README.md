@@ -29,6 +29,17 @@ Convert a watcher NDJSON export before publishing:
 python tools/convert_replay.py C:\path\to\capture.ndjson data\heimdall\battle-id
 ```
 
+Gold Vein is clipped to its one-hour event window so the replay opens at the
+actual start rather than during staging:
+
+```powershell
+python tools/convert_replay.py C:\Users\yermek\workspace\watcher\goldvein.ndjson data\heimdall\gold-vein-3v5 --start-utc 2026-09-05T14:00:00Z --end-utc 2026-09-05T15:00:00Z
+```
+
+Its catalog entry carries the independently verified 19:00:00–19:14:07
+coverage gap. The UI masks that interval as unavailable and labels all later
+figures as observed evidence rather than complete battle totals.
+
 The converter keeps marches (including speed in tiles per second), direction updates, march deletions and a
 player-aware base timeline. It also preserves capitol occupation snapshots so
 the two server progress bars stay synchronized with playback. Only map entity type 6 is treated as a player;

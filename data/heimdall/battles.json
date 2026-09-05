@@ -3,6 +3,32 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "gold-vein-3v5",
+      "title": "Gold Vein · 3 vs 5",
+      "date": "2026-09-05",
+      "start": 1788616800000,
+      "duration": 3600000,
+      "events": 391161,
+      "marches": 202876,
+      "servers": [472, 539],
+      "allowedServers": [497, 472, 533, 539, 455, 535, 461, 444],
+      "sideLabels": ["Camp 1 · S497 / S472 / S533", "Camp 2 · S539 / S455 / S535 / S461 / S444"],
+      "sideGroups": [
+        {"name": "Camp 1", "servers": [497, 472, 533]},
+        {"name": "Camp 2", "servers": [539, 455, 535, 461, 444]}
+      ],
+      "note": "World 8054 · incomplete opening",
+      "layout": "none",
+      "initialTime": 1788616800000,
+      "integrity": {
+        "title": "Opening 14 minutes are missing",
+        "message": "The packet recording continued, but all four event-map subscriptions stopped delivering map events at 19:00. Coverage resumed at 19:14:07. Totals, comparisons and rankings are incomplete; events after restoration are observed evidence, not a complete battle total.",
+        "gaps": [
+          {"start": 1788616800000, "end": 1788617647000, "reason": "No event-map subscription coverage"}
+        ]
+      }
+    },
+    {
       "id": "central-area-3v5",
       "href": "central-area-3v5.html",
       "title": "Central Area · 3 vs 5",

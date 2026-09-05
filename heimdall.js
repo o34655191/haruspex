@@ -15,6 +15,7 @@
     "captureFillA", "captureFillB", "captureValueA", "captureValueB",
     "inspector", "closeInspector",
     "inspectorKind", "inspectorTitle", "inspectorDetails", "battleTitle",
+    "integrityNotice", "integrityTitle", "integrityText", "integrityState",
   ].map(id => [id, document.getElementById(id)]));
 
   let manifest;
@@ -54,6 +55,8 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const unpack = packed => ({ x: packed % manifest.mapWidth, y: Math.floor(packed / manifest.mapWidth) });
   const selectedServer = () => ui.serverFilter.value === "all" ? null : Number(ui.serverFilter.value);
+  const allowedServer = server => !battle?.allowedServers?.length || battle.allowedServers.includes(Number(server));
+  const integrityGapAt = absolute => (battle?.integrity?.gaps || []).find(gap => absolute >= gap.start && absolute < gap.end);
 
   function colorFor(value, alpha = 1) {
     const key = String(value || "unknown");
@@ -83,8 +86,11 @@
     if (ui.colorMode.value === "alliance") {
       return colorFor(key || server || "unknown", alpha);
     }
-    if (String(server) === ui.sideAServer.value) return hexColor(ui.sideAColor.value, alpha);
-    if (String(server) === ui.sideBServer.value) return hexColor(ui.sideBColor.value, alpha);
+    const sideGroups = battle?.sideGroups || [];
+    const sideA = sideGroups[0]?.servers || [Number(ui.sideAServer.value)];
+    const sideB = sideGroups[1]?.servers || [Number(ui.sideBServer.value)];
+    if (sideA.includes(Number(server))) return hexColor(ui.sideAColor.value, alpha);
+    if (sideB.includes(Number(server))) return hexColor(ui.sideBColor.value, alpha);
     return hexColor("#657486", alpha * .62);
   }
 
@@ -98,6 +104,14 @@
 
   function baseOperationName(operation) {
     return ["Create", "Change", "Relocate"][operation] || "Observed";
+  }
+
+  function marchActionName(targetKind) {
+    return ({
+      1: "Base attack", 6: "Base attack", 11: "Base attack", 12: "Base rally",
+      111: "Rubble clear", 178: "Structure attack", 179: "Structure reinforce",
+      180: "Structure scout", 181: "Structure rally attack", 194: "Special objective attack",
+    })[targetKind] || `Target kind ${targetKind}`;
   }
 
   function baseAnchorsOverlap(left, right) {
@@ -285,12 +299,31 @@
     ui.activeMarches.textContent = activeMarches.size.toLocaleString();
     let observed = 0;
     let inferred = 0;
-    for (const base of bases.values()) base.observed ? observed++ : inferred++;
+    for (const base of bases.values()) {
+      if (!allowedServer(baseMeta(base.actor)[2])) continue;
+      base.observed ? observed++ : inferred++;
+    }
     ui.visibleBases.textContent = (observed + inferred).toLocaleString();
     ui.confirmedBases.textContent = observed.toLocaleString();
     ui.inferredBases.textContent = inferred.toLocaleString();
     ui.eventCount.textContent = eventIndex.toLocaleString();
+    updateIntegrityReadout();
     updateCaptureReadout();
+  }
+
+  function updateIntegrityReadout() {
+    const integrity = battle?.integrity;
+    if (!integrity) {
+      ui.integrityNotice.hidden = true;
+      return;
+    }
+    ui.integrityNotice.hidden = false;
+    ui.integrityTitle.textContent = integrity.title || "Incomplete observation window";
+    ui.integrityText.textContent = integrity.message || "Some event data is unavailable.";
+    const absolute = manifest.start + currentTime;
+    const inGap = (integrity.gaps || []).some(gap => absolute >= gap.start && absolute < gap.end);
+    ui.integrityNotice.classList.toggle("is-gap", inGap);
+    ui.integrityState.textContent = inGap ? "No map coverage" : "Observed window";
   }
 
   function resizeCanvas() {
@@ -320,7 +353,7 @@
 
   function resetView() {
     const { width, height } = screenSize();
-    const capitolViewSpan = 180;
+    const capitolViewSpan = battle?.layout === "none" ? 1060 : 180;
     camera = {
       x: CAPITOL.x,
       y: CAPITOL.y,
@@ -471,6 +504,7 @@
   function drawBase(base, width, height, server) {
     if (!base.observed && !ui.showInferred.checked) return;
     const meta = baseMeta(base.actor);
+    if (!allowedServer(meta[2])) return;
     if (server !== null && meta[2] !== server) return;
     const world = unpack(base.position);
     const point = toScreen(world.x, world.y, width, height);
@@ -508,6 +542,7 @@
 
   function drawMarch(march, width, height, server) {
     const player = playerFor(march.player);
+    if (!allowedServer(player[3])) return;
     if (server !== null && player[3] !== server) return;
     const world = marchPosition(march, currentTime);
     const point = toScreen(world.x, world.y, width, height);
@@ -535,6 +570,28 @@
     const { width, height, ratio } = screenSize();
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     drawGrid(width, height);
+    const gap = manifest ? integrityGapAt(manifest.start + currentTime) : null;
+    if (gap) {
+      ctx.save();
+      ctx.fillStyle = "rgba(20,5,8,.82)";
+      ctx.fillRect(0, 0, width, height);
+      ctx.strokeStyle = "rgba(255,93,93,.12)";
+      ctx.lineWidth = 1;
+      for (let x = -height; x < width + height; x += 24) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + height, height); ctx.stroke();
+      }
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#ff9292";
+      ctx.font = "700 18px ui-monospace, monospace";
+      ctx.fillText("NO EVENT-MAP COVERAGE", width / 2, height / 2 - 8);
+      ctx.fillStyle = "rgba(236,210,214,.72)";
+      ctx.font = "11px ui-monospace, monospace";
+      ctx.fillText("19:00:00–19:14:07 · events in this interval were not observed", width / 2, height / 2 + 18);
+      ctx.restore();
+      renderHits = [];
+      redrawNeeded = false;
+      return;
+    }
     drawCapitol(width, height);
     renderHits = [];
     const server = selectedServer();
@@ -591,6 +648,7 @@
       const rows = [
         ["Alliance", player[2]],
         ["Server", String(player[3] || "")],
+        ["Action", marchActionName(march.targetKind)],
         ["March type", String(march.type)],
         ["From", `${Math.round(march.sx)}, ${Math.round(march.sy)}`],
         ["Target", `${march.tx}, ${march.ty}`],
@@ -641,6 +699,12 @@
       const manifestResponse = await fetch(`${dataRoot}manifest.json`);
       if (!manifestResponse.ok) throw new Error(`manifest HTTP ${manifestResponse.status}`);
       manifest = await manifestResponse.json();
+      if (battle.layout === "none") {
+        ui.showCapitol.checked = false;
+        ui.showCapitol.closest("label").hidden = true;
+        document.querySelector(".key-capitol")?.closest("span")?.remove();
+        document.querySelector(".key-blocked")?.closest("span")?.remove();
+      }
       ui.timeline.max = String(manifest.duration);
       for (let i = 0; i < manifest.chunks.length; i++) {
         const chunk = manifest.chunks[i];
@@ -657,7 +721,8 @@
       ui.play.disabled = false;
       ui.timeline.disabled = false;
       resetView();
-      setTime(0, true);
+      const initialTime = battle.initialTime ? clamp(battle.initialTime - manifest.start, 0, manifest.duration) : 0;
+      setTime(initialTime, true);
     } catch (error) {
       console.error(error);
       ui.loadState.textContent = location.protocol === "file:"
@@ -676,6 +741,7 @@
     const serverCounts = new Map();
     const alliances = new Map();
     const remember = (abbr, server, alliance) => {
+      if (!allowedServer(server)) return;
       if (server) serverCounts.set(server, (serverCounts.get(server) || 0) + 1);
       const key = allianceKey(alliance, abbr);
       if (!key) return;

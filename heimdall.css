@@ -38,6 +38,9 @@
 .inspector dd{margin:0;color:var(--ink);text-align:right;overflow-wrap:anywhere}
 
 .capture-progress{margin-top:12px;padding:12px 14px;border:1px solid var(--line);border-radius:13px;background:linear-gradient(135deg,rgba(20,26,35,.96),rgba(11,16,23,.96));box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.integrity-notice{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:13px;margin:12px 0 0;padding:13px 15px;border:1px solid rgba(255,93,93,.48);border-radius:13px;background:linear-gradient(110deg,rgba(105,29,36,.28),rgba(20,26,35,.96) 62%);box-shadow:0 12px 32px rgba(0,0,0,.18)}
+.integrity-notice[hidden]{display:none}.integrity-mark{display:grid;place-items:center;width:34px;height:34px;border:1px solid rgba(255,111,111,.75);border-radius:50%;color:#ff9292;font:700 18px var(--mono);box-shadow:0 0 18px rgba(255,75,75,.16)}
+.integrity-notice h2{margin:2px 0 4px;font-size:13px;letter-spacing:.07em;text-transform:uppercase}.integrity-notice p{margin:0;max-width:850px;color:var(--ink-dim);font-size:11px;line-height:1.5}.integrity-notice>strong{padding:6px 9px;border:1px solid rgba(109,211,160,.35);border-radius:999px;color:#8de0b5;font:650 9px var(--mono);letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}.integrity-notice.is-gap>strong{border-color:rgba(255,93,93,.48);color:#ff9292;background:rgba(105,29,36,.25)}
 .capture-progress[hidden]{display:none}
 .capture-heading{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:10px}
 .capture-heading h2{margin:3px 0 0;font-size:13px;line-height:1.2;letter-spacing:.08em;text-transform:uppercase}
@@ -78,6 +81,7 @@
 .palette-panel label[for="highlightAlliance"]{margin-left:auto}
 
 @media(max-width:700px){
+  .integrity-notice{grid-template-columns:34px 1fr}.integrity-notice>strong{grid-column:1/-1;width:max-content}
   .replay-header{grid-template-columns:auto 1fr}.load-state{grid-column:1/-1;text-align:left}
   .replay-stage{height:64vh;min-height:390px}
   .transport-main{grid-template-columns:42px 1fr auto}.timeline{grid-column:1/-1;grid-row:2}.clock{min-width:0}.speed{grid-column:3;grid-row:1}

@@ -26,7 +26,7 @@ def record(offset_ms, route, fields):
     }
 
 
-def player_point(operation, position, point_id, name="Alice", kind=6):
+def player_point(operation, position, point_id, name="Alice", kind=6, config=10_100_000):
     return {
         "type": operation,
         "sid": 435,
@@ -39,6 +39,7 @@ def player_point(operation, position, point_id, name="Alice", kind=6):
                 "f103": 472,
                 "f3": {
                     "f2": point_id,
+                    "f3": config,
                     "f7": "alliance-id",
                     "f14": name,
                     "f15": "TAG",
@@ -153,6 +154,32 @@ class ConvertReplayTests(unittest.TestCase):
         self.assertFalse(any(event[0] == 2 and event[3] >= 0 for event in events))
         self.assertEqual(diagnostics["pointEntityKinds"]["17"], 1)
         self.assertEqual(diagnostics["summary"].get("genericRemoveAtKnownBase", 0), 0)
+
+    def test_rubble_city_entity_never_becomes_player_base(self):
+        records = [
+            record(
+                0,
+                "push.world.point.update",
+                player_point("create", 400400, 123, name="Burned city", config=10_301_000),
+            ),
+        ]
+
+        manifest, events, _diagnostics = self.convert_records(records)
+
+        self.assertEqual(manifest["baseActors"], [])
+        self.assertFalse(any(event[0] == 2 and event[3] >= 0 for event in events))
+
+    def test_world_snapshot_seeds_observed_player_bases(self):
+        fields = player_point("create", 500500, 111)
+        fields.pop("type")
+        records = [record(0, "world.get.block", fields)]
+
+        manifest, events, _diagnostics = self.convert_records(records)
+
+        self.assertEqual(manifest["counts"]["worldSnapshots"], 1)
+        observed = [event for event in events if event[0] == 2 and event[3] >= 0]
+        self.assertEqual(len(observed), 1)
+        self.assertEqual(observed[0][2], BASE_CREATE)
 
     def test_three_by_three_overlap_uses_centre_anchors(self):
         self.assertTrue(anchors_overlap(500500, 502502))

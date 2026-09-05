@@ -20,6 +20,7 @@ from typing import Any
 MARCH_NEW = "push.world.march.new"
 MARCH_DEL = "push.world.march.del"
 POINT_UPDATE = "push.world.point.update"
+WORLD_SNAPSHOT = "world.get.block"
 THRONE_SCORE = "get.server.throne.occupy.score"
 
 CAPTURE_TARGET = 720_000
@@ -40,6 +41,7 @@ OP_CODES = {
 
 INFERENCE_WINDOW_MS = 5 * 60_000
 PLAYER_ENTITY_TYPE = 6
+PLAYER_CITY_CONFIG = 10_100_000
 MAP_WIDTH = 1000
 
 
@@ -412,7 +414,13 @@ def build_diagnostics(
     }
 
 
-def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
+def convert(
+    source: Path,
+    output: Path,
+    chunk_ms: int,
+    start_at: int | None = None,
+    end_at: int | None = None,
+) -> dict[str, Any]:
     march_ids = Index()
     team_ids = Index()
     base_ids = Index()
@@ -429,9 +437,10 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
         "baseUpdates": 0,
         "genericRemovals": 0,
         "captureSamples": 0,
+        "worldSnapshots": 0,
         "skipped": 0,
     }
-    start = end = None
+    start = end = start_at
 
     def player_index(uid: Any, name: Any, abbr: Any, server: Any, alliance: Any) -> int:
         key = as_string(uid)
@@ -455,6 +464,11 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
             except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 counts["skipped"] += 1
                 continue
+
+            if start_at is not None and capture_time < start_at:
+                continue
+            if end_at is not None and capture_time > end_at:
+                break
 
             if start is None:
                 start = capture_time
@@ -571,6 +585,9 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
                     if position is None:
                         continue
                     details = as_dict(point.get("f3"))
+                    config = as_int(details.get("f3"))
+                    if config not in (0, PLAYER_CITY_CONFIG):
+                        continue
                     base_id = first(
                         point.get("f100"), details.get("f2"), f"position:{position}"
                     )
@@ -599,6 +616,45 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
                     )
                     counts["baseUpdates"] += 1
 
+            elif route == WORLD_SNAPSHOT:
+                points = fields.get("points") or []
+                if isinstance(points, dict):
+                    points = [points]
+                counts["worldSnapshots"] += 1
+                for point in points:
+                    if not isinstance(point, dict):
+                        continue
+                    kind = as_int(point.get("f2"), -1)
+                    entity_kinds[str(kind)] += 1
+                    if kind != PLAYER_ENTITY_TYPE:
+                        continue
+                    details = as_dict(point.get("f3"))
+                    config = as_int(details.get("f3"))
+                    if config not in (0, PLAYER_CITY_CONFIG):
+                        continue
+                    position = point.get("f1")
+                    if position is None:
+                        continue
+                    base_id = first(
+                        point.get("f100"), details.get("f2"), f"position:{position}"
+                    )
+                    base_index = base_ids.add(base_id)
+                    while len(bases) <= base_index:
+                        bases.append(["", "", 0, ""])
+                    incoming = [
+                        text(details.get("f14")),
+                        text(details.get("f15")),
+                        as_int(first(point.get("f103"), point.get("f102"), fields.get("serverId"))),
+                        text(details.get("f7")),
+                    ]
+                    existing = bases[base_index]
+                    bases[base_index] = [
+                        incoming[i] if incoming[i] not in ("", 0) else existing[i]
+                        for i in range(4)
+                    ]
+                    events.append([2, event_time, BASE_CREATE, base_index, as_int(position), base_index])
+                    counts["baseUpdates"] += 1
+
             elif route == THRONE_SCORE:
                 sample = capture_sample(fields, event_time)
                 if sample is not None:
@@ -608,6 +664,8 @@ def convert(source: Path, output: Path, chunk_ms: int) -> dict[str, Any]:
             if line_number % 100_000 == 0:
                 print(f"read {line_number:,} records", flush=True)
 
+    if end_at is not None and end is not None:
+        end = end_at
     if start is None or end is None:
         raise ValueError(f"no valid records in {source}")
 
@@ -701,10 +759,16 @@ def main() -> None:
     parser.add_argument("source", type=Path, help="watcher NDJSON capture")
     parser.add_argument("output", type=Path, help="static output directory")
     parser.add_argument("--chunk-minutes", type=int, default=5)
+    parser.add_argument("--start-utc", help="optional inclusive RFC3339 replay start")
+    parser.add_argument("--end-utc", help="optional inclusive RFC3339 replay end")
     args = parser.parse_args()
     if args.chunk_minutes < 1:
         parser.error("--chunk-minutes must be at least 1")
-    convert(args.source, args.output, args.chunk_minutes * 60_000)
+    start_at = parse_time(args.start_utc) if args.start_utc else None
+    end_at = parse_time(args.end_utc) if args.end_utc else None
+    if start_at is not None and end_at is not None and end_at <= start_at:
+        parser.error("--end-utc must be later than --start-utc")
+    convert(args.source, args.output, args.chunk_minutes * 60_000, start_at, end_at)
 
 
 if __name__ == "__main__":

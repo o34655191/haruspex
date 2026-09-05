@@ -1,0 +1,226 @@
+{
+  "version": 1,
+  "source": "goldvein.ndjson",
+  "summary": {
+    "foldUpAtUnknownPosition": 5546,
+    "genericRemovePositions": 16859,
+    "foldUpAtKnownBase": 14490,
+    "pairedRelocations": 13715,
+    "sameActorMovedWithoutDeparture": 1159,
+    "pairedWithinOneSecond": 13570,
+    "overlapEvictions": 6,
+    "lateUnpairedReappearance": 190,
+    "inferredBasePlacements": 13,
+    "genericRemoveAtKnownBase": 5,
+    "logicalBaseActors": 2101,
+    "actorsLinkedToMarchPlayers": 1096,
+    "marchPlayers": 2039,
+    "marchPlayersWithObservedBase": 1096,
+    "unresolvedMarchPlayers": 943
+  },
+  "pointOperations": {
+    "foldUp": 20036,
+    "create": 4839,
+    "remove": 16855,
+    "relocate": 14704,
+    "change": 102215
+  },
+  "pointEntityKinds": {
+    "6": 118798,
+    "7": 46,
+    "17": 1,
+    "55": 503,
+    "58": 115,
+    "57": 64,
+    "56": 2,
+    "-1": 2134,
+    "38": 2016
+  },
+  "semantics": {
+    "create": "observed player appearance",
+    "change": "observed player refresh in place",
+    "relocate": "observed player arrival",
+    "foldUp": "observed vacancy at an old player anchor",
+    "remove": "generic map-object removal; does not mutate player state",
+    "inferred": "march candidate confirmed by a later player point within five minutes"
+  },
+  "assumptions": [
+    "Only point entity type 6 is a player base.",
+    "The packed player point is the centre anchor of a 3x3 footprint.",
+    "foldUp alone does not distinguish voluntary and forced relocation.",
+    "This capture contains no world.get.block snapshot, so initial coverage is partial."
+  ],
+  "samples": {
+    "genericRemoveAtPlayer": [
+      {
+        "time": 1971664,
+        "position": 152591,
+        "actors": [
+          430
+        ]
+      },
+      {
+        "time": 2256687,
+        "position": 214792,
+        "actors": [
+          213
+        ]
+      },
+      {
+        "time": 2787636,
+        "position": 194789,
+        "actors": [
+          215
+        ]
+      },
+      {
+        "time": 3059892,
+        "position": 111792,
+        "actors": [
+          265
+        ]
+      },
+      {
+        "time": 3414600,
+        "position": 302908,
+        "actors": [
+          636
+        ]
+      }
+    ],
+    "overlapEvictions": [
+      {
+        "time": 847914,
+        "position": 949320,
+        "evicted": 950318
+      },
+      {
+        "time": 2029618,
+        "position": 107699,
+        "evicted": 107700
+      },
+      {
+        "time": 2179127,
+        "position": 112533,
+        "evicted": 113533
+      },
+      {
+        "time": 2813273,
+        "position": 320108,
+        "evicted": 319108
+      },
+      {
+        "time": 2815784,
+        "position": 311102,
+        "evicted": 311102
+      },
+      {
+        "time": 2861448,
+        "position": 87279,
+        "evicted": 87279
+      }
+    ],
+    "pairedRelocations": [
+      {
+        "departed": 90347,
+        "arrived": 200611,
+        "delayMs": 110264
+      },
+      {
+        "departed": 847891,
+        "arrived": 847891,
+        "delayMs": 0
+      },
+      {
+        "departed": 848289,
+        "arrived": 848297,
+        "delayMs": 8
+      },
+      {
+        "departed": 848356,
+        "arrived": 848368,
+        "delayMs": 12
+      },
+      {
+        "departed": 848428,
+        "arrived": 848429,
+        "delayMs": 1
+      },
+      {
+        "departed": 848519,
+        "arrived": 848523,
+        "delayMs": 4
+      },
+      {
+        "departed": 848782,
+        "arrived": 848788,
+        "delayMs": 6
+      },
+      {
+        "departed": 848779,
+        "arrived": 848790,
+        "delayMs": 11
+      },
+      {
+        "departed": 849022,
+        "arrived": 849032,
+        "delayMs": 10
+      },
+      {
+        "departed": 849289,
+        "arrived": 849299,
+        "delayMs": 10
+      },
+      {
+        "departed": 849635,
+        "arrived": 849646,
+        "delayMs": 11
+      },
+      {
+        "departed": 849655,
+        "arrived": 849657,
+        "delayMs": 2
+      },
+      {
+        "departed": 849812,
+        "arrived": 849822,
+        "delayMs": 10
+      },
+      {
+        "departed": 850346,
+        "arrived": 850347,
+        "delayMs": 1
+      },
+      {
+        "departed": 850505,
+        "arrived": 850511,
+        "delayMs": 6
+      },
+      {
+        "departed": 850639,
+        "arrived": 850648,
+        "delayMs": 9
+      },
+      {
+        "departed": 850893,
+        "arrived": 850901,
+        "delayMs": 8
+      },
+      {
+        "departed": 850986,
+        "arrived": 850999,
+        "delayMs": 13
+      },
+      {
+        "departed": 851033,
+        "arrived": 851043,
+        "delayMs": 10
+      },
+      {
+        "departed": 851342,
+        "arrived": 851354,
+        "delayMs": 12
+      }
+    ]
+  }
+}

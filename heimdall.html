@@ -20,6 +20,16 @@
       <div class="load-state" id="loadState" role="status">Loading manifest…</div>
     </header>
 
+    <section class="integrity-notice" id="integrityNotice" aria-labelledby="integrityTitle" hidden>
+      <div class="integrity-mark" aria-hidden="true">!</div>
+      <div>
+        <div class="eyebrow">Coverage integrity</div>
+        <h2 id="integrityTitle">Incomplete observation window</h2>
+        <p id="integrityText"></p>
+      </div>
+      <strong id="integrityState">Observed data</strong>
+    </section>
+
     <section class="replay-stage" aria-label="Interactive world map replay">
       <canvas id="map" tabindex="0" aria-label="World map. Drag to pan, pinch or use the zoom controls to zoom, and tap a march or base for details."></canvas>
       <div class="map-key" aria-hidden="true">
