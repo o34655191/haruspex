@@ -97,3 +97,11 @@
 }
 
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.program,.capture-track i{transition:none}}
+/* Player controls stay usable on narrow screens without covering the map. */
+.player-panel { flex-wrap: wrap; gap: 10px; }
+.player-panel input[type="search"] { min-width: 180px; padding: 8px; background: #101923; color: #edf4fc; border: 1px solid #536478; border-radius: 5px; }
+.player-panel select { max-width: min(440px, 85vw); }
+.player-panel button { padding: 8px 12px; border: 1px solid #536478; border-radius: 6px; background: #172330; color: #edf4fc; cursor: pointer; }
+.player-panel button:hover { background: #283d50; }
+#playerStatus { flex-basis: 100%; color: #bacbdd; font-size: 12px; }
+.player-panel button:focus-visible, .player-panel input:focus-visible, .player-panel select:focus-visible { outline: 2px solid #ffd166; outline-offset: 3px; }

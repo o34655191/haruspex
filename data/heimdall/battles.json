@@ -3,6 +3,30 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "goldvein-w2",
+      "events": 501426,
+      "marches": 251651,
+      "href": "goldvein-w2.html",
+      "title": "Gold Vein · Week 2 · 3 vs 5",
+      "date": "2026-09-12",
+      "start": 1789220400000,
+      "duration": 4800000,
+      "servers": [472, 539],
+      "allowedServers": [497, 472, 533, 539, 455, 535, 461, 444],
+      "sideLabels": ["Camp 1 · S497 / S472 / S533", "Camp 2 · S539 / S455 / S535 / S461 / S444"],
+      "sideGroups": [
+        {"name": "Camp 1", "servers": [497, 472, 533]},
+        {"name": "Camp 2", "servers": [539, 455, 535, 461, 444]}
+      ],
+      "layout": "none",
+      "note": "Week 2 · observed reconstruction",
+      "integrity": {
+        "title": "Observed reconstruction — coverage not certified",
+        "message": "The supplied window starts at 18:40, but decoded capture data begins at 18:45:41. The earlier interval is unavailable. Later activity is observed evidence, not proof of complete map coverage. Movement is interpolated; featured players are curated, not rankings.",
+        "gaps": [{"start": 1789220400000, "end": 1789220741564, "reason": "Before the first decoded capture record"}]
+      }
+    },
+    {
       "id": "gold-vein-3v5",
       "title": "Gold Vein · 3 vs 5",
       "date": "2026-09-05",

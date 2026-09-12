@@ -36,6 +36,99 @@
   const activePointers = new Map();
   let pinch = null;
   let highlightAllianceGroups = new Map();
+  let selectedPlayer = -1;
+  const featuredPlayers = new Set();
+  const playerActions = new Map();
+  const playerObservations = new Map();
+  let focusUI;
+
+  function setupPlayerControls() {
+    const panel = document.createElement("section");
+    panel.className = "palette-panel player-panel";
+    panel.setAttribute("aria-label", "Player spotlight");
+    panel.innerHTML = `<label for="playerSearch">Find player</label><input id="playerSearch" type="search" placeholder="Name, alliance or server"><label for="playerSelect">Player</label><select id="playerSelect"><option value="-1">None</option></select><label><input id="followPlayer" type="checkbox"> Follow base</label><label><input id="featuredVisible" type="checkbox" checked> Featured markers</label><button id="featurePlayer" type="button">Star / unstar player</button><button id="firstAction" type="button">First observation</button><button id="nextAction" type="button">Next action</button><span id="playerStatus" role="status">Select a player to spotlight their base and marches.</span>`;
+    document.querySelector(".palette-panel").after(panel);
+    focusUI = Object.fromEntries([...panel.querySelectorAll("[id]")].map(el => [el.id, el]));
+    const populate = () => {
+      const query = focusUI.playerSearch.value.toLocaleLowerCase();
+      focusUI.playerSelect.replaceChildren(new Option("None", "-1"));
+      manifest.players.forEach((p, index) => {
+        const label = `${p[1]} · ${p[2] || "No alliance"} · S${p[3]}`;
+        if (allowedServer(p[3]) && (index === selectedPlayer || label.toLocaleLowerCase().includes(query))) {
+          focusUI.playerSelect.add(new Option(label, String(index)));
+        }
+      });
+      focusUI.playerSelect.value = String(selectedPlayer);
+    };
+    manifest.players.forEach((p, index) => {
+      if (["extradamage", "aloha1234"].includes(p[1].trim().toLowerCase())) featuredPlayers.add(index);
+    });
+    for (const event of events) {
+      const index = event[0] === 0 ? event[3] : event[0] === 2 && event[2] <= 2 ? baseMeta(event[3])[4] : -1;
+      if (index >= 0) {
+        if (!playerActions.has(index)) playerActions.set(index, []);
+        playerActions.get(index).push(event[1]);
+        if (event[0] === 2) {
+          if (!playerObservations.has(index)) playerObservations.set(index, []);
+          playerObservations.get(index).push({time: event[1], position: event[4]});
+        }
+      }
+    }
+    populate();
+    focusUI.playerSearch.addEventListener("input", populate);
+    focusUI.playerSelect.addEventListener("change", () => {
+      selectedPlayer = Number(focusUI.playerSelect.value);
+      ui.serverFilter.value = "all";
+      redrawNeeded = true;
+    });
+    for (const id of ["followPlayer", "featuredVisible"]) focusUI[id].addEventListener("change", () => { redrawNeeded = true; });
+    focusUI.featurePlayer.addEventListener("click", () => {
+      if (selectedPlayer < 0) return;
+      if (featuredPlayers.has(selectedPlayer)) featuredPlayers.delete(selectedPlayer);
+      else featuredPlayers.add(selectedPlayer);
+      redrawNeeded = true;
+    });
+    const jump = first => {
+      const times = playerActions.get(selectedPlayer) || [];
+      const time = first ? times[0] : times.find(t => t > currentTime + 1);
+      if (time === undefined) { focusUI.playerStatus.textContent = "No further recorded action for this player."; return; }
+      setPlaying(false);
+      setTime(time, true);
+    };
+    focusUI.firstAction.addEventListener("click", () => jump(true));
+    focusUI.nextAction.addEventListener("click", () => jump(false));
+  }
+
+  function playerBadge(index, point, server, observed = true) {
+    if (index < 0) return;
+    const selected = index === selectedPlayer;
+    const featured = focusUI?.featuredVisible.checked && featuredPlayers.has(index);
+    if (!selected && !featured) return;
+    ctx.save();
+    ctx.strokeStyle = selected ? "#fff" : campColor(server);
+    ctx.lineWidth = 2;
+    ctx.setLineDash(observed ? [] : [3, 3]);
+    ctx.beginPath(); ctx.arc(point.x, point.y, 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    const player = playerFor(index);
+    const queen = ["extradamage", "aloha1234"].includes(player[1].trim().toLowerCase());
+    ctx.font = "bold 19px Georgia, serif";
+    ctx.fillStyle = campColor(server);
+    if (featured) ctx.fillText(queen ? "♛" : "★", point.x - 8, point.y - 17);
+    ctx.font = "bold 11px system-ui";
+    const label = player[1] + (observed ? "" : " · inferred");
+    ctx.fillStyle = "#10151d";
+    ctx.fillRect(point.x + 16, point.y - 12, ctx.measureText(label).width + 8, 18);
+    ctx.fillStyle = "#fff"; ctx.fillText(label, point.x + 20, point.y + 1);
+    ctx.restore();
+  }
+
+  function campColor(server, alpha = 1) {
+    const groups = battle?.sideGroups || [];
+    if ((groups[0]?.servers || [Number(ui.sideAServer.value)]).includes(Number(server))) return hexColor(ui.sideAColor.value, alpha);
+    if ((groups[1]?.servers || [Number(ui.sideBServer.value)]).includes(Number(server))) return hexColor(ui.sideBColor.value, alpha);
+    return hexColor("#657486", alpha);
+  }
 
   // Capture-verified Warzone layout. March targets place the sanctuary at
   // X500/Y499 and its four cannons nine tiles diagonally from that center.
@@ -78,7 +171,8 @@
     return alliance || (abbr ? `abbr:${abbr}` : "");
   }
 
-  function entityColor(alliance, abbr, server, alpha = 1) {
+  function entityColor(alliance, abbr, server, alpha = 1, playerIndex = -1) {
+    if (playerIndex >= 0 && playerIndex === selectedPlayer) return hexColor(ui.highlightColor.value, alpha);
     const key = allianceKey(alliance, abbr);
     if (highlightAllianceGroups.get(ui.highlightAlliance.value)?.has(key)) {
       return hexColor(ui.highlightColor.value, alpha);
@@ -86,6 +180,8 @@
     if (ui.colorMode.value === "alliance") {
       return colorFor(key || server || "unknown", alpha);
     }
+    if (playerIndex >= 0 && focusUI?.featuredVisible.checked && featuredPlayers.has(playerIndex)) return campColor(server, alpha);
+    if (ui.colorMode.value === "spotlight" && ui.highlightAlliance.value) alpha *= .22;
     const sideGroups = battle?.sideGroups || [];
     const sideA = sideGroups[0]?.servers || [Number(ui.sideAServer.value)];
     const sideB = sideGroups[1]?.servers || [Number(ui.sideBServer.value)];
@@ -509,9 +605,10 @@
     const world = unpack(base.position);
     const point = toScreen(world.x, world.y, width, height);
     if (!inView(point, width, height)) return;
-    const color = entityColor(meta[3], meta[1], meta[2]);
+    const color = entityColor(meta[3], meta[1], meta[2], 1, meta[4]);
     const size = Math.max(4, camera.zoom * 3);
-    ctx.fillStyle = entityColor(meta[3], meta[1], meta[2], base.observed ? .2 : .05);
+    const emphasized = meta[4] === selectedPlayer && selectedPlayer >= 0 || focusUI?.featuredVisible.checked && featuredPlayers.has(meta[4]) || highlightAllianceGroups.get(ui.highlightAlliance.value)?.has(allianceKey(meta[3], meta[1]));
+    ctx.fillStyle = entityColor(meta[3], meta[1], meta[2], emphasized ? .9 : base.observed ? .35 : .05, meta[4]);
     ctx.strokeStyle = color;
     ctx.lineWidth = base.observed ? 1 : 1.25;
     ctx.setLineDash(base.observed ? [] : [3, 2]);
@@ -524,6 +621,11 @@
       ctx.fillText(meta[1], point.x + size / 2 + 3, point.y + 3);
     }
     renderHits.push({ kind: "base", x: point.x, y: point.y, data: base });
+    if (ui.colorMode.value === "alliance") {
+      ctx.strokeStyle = campColor(meta[2]);
+      ctx.strokeRect(point.x - size / 2 - 2, point.y - size / 2 - 2, size + 4, size + 4);
+    }
+    playerBadge(meta[4], point, meta[2], base.observed);
   }
 
   function drawArrow(from, to, color) {
@@ -548,8 +650,8 @@
     const point = toScreen(world.x, world.y, width, height);
     if (!inView(point, width, height, 60)) return;
     const target = toScreen(march.tx, march.ty, width, height);
-    const color = entityColor(player[4], player[2], player[3]);
-    if (ui.showRoutes.checked) drawArrow(point, target, entityColor(player[4], player[2], player[3], .28));
+    const color = entityColor(player[4], player[2], player[3], 1, march.player);
+    if (ui.showRoutes.checked || march.player === selectedPlayer) drawArrow(point, target, entityColor(player[4], player[2], player[3], march.player === selectedPlayer ? .9 : .28, march.player));
     const angle = Math.atan2(target.y - point.y, target.x - point.x);
     const radius = 4.5;
     ctx.save();
@@ -563,9 +665,21 @@
       ctx.fillText(player[2], point.x + 7, point.y - 6);
     }
     renderHits.push({ kind: "march", x: point.x, y: point.y, data: march });
+    if (ui.colorMode.value === "alliance") {
+      ctx.strokeStyle = campColor(player[3]);
+      ctx.beginPath(); ctx.arc(point.x, point.y, 7, 0, Math.PI * 2); ctx.stroke();
+    }
+    if (march.player === selectedPlayer || featuredPlayers.has(march.player)) playerBadge(march.player, point, player[3], false);
   }
 
   function render() {
+    if (focusUI && selectedPlayer < 0) focusUI.playerStatus.textContent = "Select a player to spotlight their base and marches. Queens and stars are curated, not rankings.";
+    if (focusUI && selectedPlayer >= 0) {
+      const gapNow = integrityGapAt(manifest.start + currentTime);
+      const base = [...bases.values()].find(b => b.observed && baseMeta(b.actor)[4] === selectedPlayer);
+      focusUI.playerStatus.textContent = gapNow ? "Coverage gap: position unavailable." : base ? "Last observed base position; marches are interpolated. Featured markers are curated, not rankings." : "Base not currently observed; recorded marches may still be visible.";
+      if (!gapNow && base && focusUI.followPlayer.checked) Object.assign(camera, unpack(base.position));
+    }
     resizeCanvas();
     const { width, height, ratio } = screenSize();
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -586,13 +700,24 @@
       ctx.fillText("NO EVENT-MAP COVERAGE", width / 2, height / 2 - 8);
       ctx.fillStyle = "rgba(236,210,214,.72)";
       ctx.font = "11px ui-monospace, monospace";
-      ctx.fillText("19:00:00–19:14:07 · events in this interval were not observed", width / 2, height / 2 + 18);
+      ctx.fillText(gap.reason || "Events in this interval were not observed", width / 2, height / 2 + 18);
       ctx.restore();
       renderHits = [];
       redrawNeeded = false;
       return;
     }
     drawCapitol(width, height);
+    // Discrete breadcrumbs, never a fabricated path between teleports.
+    const trail = (playerObservations.get(selectedPlayer) || []).filter(p => p.time <= currentTime && p.time >= currentTime - 300000 && !integrityGapAt(manifest.start + p.time));
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,.55)";
+    ctx.setLineDash([2, 2]);
+    for (const sample of trail.slice(-100)) {
+      const world = unpack(sample.position);
+      const point = toScreen(world.x, world.y, width, height);
+      ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
     renderHits = [];
     const server = selectedServer();
     if (ui.showBases.checked) for (const base of bases.values()) drawBase(base, width, height, server);
@@ -671,7 +796,6 @@
         ["Footprint", "3 × 3 tiles"],
         ["Evidence", base.observed ? baseOperationName(base.operation) : "March + later point confirmation"],
         ["Confidence", `${base.confidence}%`],
-        ["Map point ID", base.instance >= 0 ? manifest.baseIds[base.instance] : ""],
       ]);
     }
     ui.inspector.hidden = false;
@@ -679,7 +803,7 @@
 
   async function loadReplay() {
     try {
-      const catalogResponse = await fetch(CATALOG_URL);
+      const catalogResponse = await fetch(CATALOG_URL, { cache: "no-store" });
       if (!catalogResponse.ok) throw new Error(`battle archive HTTP ${catalogResponse.status}`);
       const catalog = await catalogResponse.json();
       const queryBattle = new URLSearchParams(location.search).get("battle");
@@ -696,7 +820,7 @@
       ui.battleTitle.textContent = battle.title;
       document.title = `${battle.title} — Heimdall`;
 
-      const manifestResponse = await fetch(`${dataRoot}manifest.json`);
+      const manifestResponse = await fetch(`${dataRoot}manifest.json`, { cache: "no-store" });
       if (!manifestResponse.ok) throw new Error(`manifest HTTP ${manifestResponse.status}`);
       manifest = await manifestResponse.json();
       if (battle.layout === "none") {
@@ -709,13 +833,14 @@
       for (let i = 0; i < manifest.chunks.length; i++) {
         const chunk = manifest.chunks[i];
         ui.loadState.textContent = `Loading replay ${i + 1}/${manifest.chunks.length}…`;
-        const response = await fetch(dataRoot + chunk.file);
+        const response = await fetch(dataRoot + chunk.file, { cache: "no-store" });
         if (!response.ok) throw new Error(`${chunk.file} HTTP ${response.status}`);
         const payload = await response.json();
         events.push(...payload.e);
       }
       events.sort((a, b) => a[1] - b[1]);
       populateServers();
+      setupPlayerControls();
       ui.loadState.textContent = `${events.length.toLocaleString()} events · ${formatDuration(manifest.duration)}`;
       ui.loadState.className = "load-state ready";
       ui.play.disabled = false;
@@ -828,7 +953,7 @@
   }
 
   function updatePaletteControls() {
-    ui.sideControls.hidden = ui.colorMode.value !== "server";
+    ui.sideControls.hidden = false;
     if (manifest) updateCaptureReadout();
     redrawNeeded = true;
   }

@@ -11,10 +11,21 @@ from tools.convert_replay import (
     MAP_REMOVE,
     anchors_overlap,
     convert,
+    build_base_actors,
 )
 
 
 START = datetime(2026, 8, 8, 13, 0, tzinfo=timezone.utc)
+
+
+class IdentityTests(unittest.TestCase):
+    def test_uid_links_renamed_base(self):
+        actors, _ = build_base_actors([["123", "New name", "TAG", 472, "a"]], [["Old name", "TAG", 472, "a"]], ["base"], {"base": "123"})
+        self.assertEqual(actors[0][4], 0)
+
+    def test_conflicting_uid_does_not_fall_back_to_name(self):
+        actors, _ = build_base_actors([["123", "Alice", "TAG", 472, "a"]], [["Alice", "TAG", 472, "a"]], ["base"], {"base": "456"})
+        self.assertEqual(actors[0][4], -1)
 
 
 def record(offset_ms, route, fields):

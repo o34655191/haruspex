@@ -1,0 +1,165 @@
+{
+  "version": 1,
+  "source": "capture.corrected.ndjson",
+  "summary": {
+    "genericRemovePositions": 21444,
+    "foldUpAtKnownBase": 18732,
+    "pairedRelocations": 17878,
+    "pairedWithinOneSecond": 17743,
+    "lateUnpairedReappearance": 240,
+    "sameActorMovedWithoutDeparture": 1671,
+    "foldUpAtUnknownPosition": 6628,
+    "inferredBasePlacements": 18,
+    "overlapEvictions": 1,
+    "logicalBaseActors": 2036,
+    "actorsLinkedToMarchPlayers": 1978,
+    "marchPlayers": 1985,
+    "marchPlayersWithObservedBase": 1978,
+    "unresolvedMarchPlayers": 7
+  },
+  "pointOperations": {
+    "change": 136316,
+    "create": 7324,
+    "remove": 21444,
+    "foldUp": 25360,
+    "relocate": 19330
+  },
+  "pointEntityKinds": {
+    "6": 158292,
+    "7": 61,
+    "55": 981,
+    "58": 206,
+    "57": 111,
+    "56": 4,
+    "35": 2,
+    "17": 2,
+    "38": 2180,
+    "-1": 2123
+  },
+  "semantics": {
+    "create": "observed player appearance",
+    "change": "observed player refresh in place",
+    "relocate": "observed player arrival",
+    "foldUp": "observed vacancy at an old player anchor",
+    "remove": "generic map-object removal; does not mutate player state",
+    "inferred": "march candidate confirmed by a later player point within five minutes"
+  },
+  "assumptions": [
+    "Only point entity type 6 is a player base.",
+    "The packed player point is the centre anchor of a 3x3 footprint.",
+    "foldUp alone does not distinguish voluntary and forced relocation.",
+    "This capture contains no world.get.block snapshot, so initial coverage is partial."
+  ],
+  "samples": {
+    "genericRemoveAtPlayer": [],
+    "overlapEvictions": [
+      {
+        "time": 3143734,
+        "position": 356616,
+        "evicted": 355616
+      }
+    ],
+    "pairedRelocations": [
+      {
+        "departed": 752183,
+        "arrived": 752192,
+        "delayMs": 9
+      },
+      {
+        "departed": 768523,
+        "arrived": 768524,
+        "delayMs": 1
+      },
+      {
+        "departed": 915280,
+        "arrived": 915287,
+        "delayMs": 7
+      },
+      {
+        "departed": 930538,
+        "arrived": 930544,
+        "delayMs": 6
+      },
+      {
+        "departed": 940683,
+        "arrived": 940685,
+        "delayMs": 2
+      },
+      {
+        "departed": 971836,
+        "arrived": 971837,
+        "delayMs": 1
+      },
+      {
+        "departed": 994846,
+        "arrived": 994846,
+        "delayMs": 0
+      },
+      {
+        "departed": 1007643,
+        "arrived": 1007644,
+        "delayMs": 1
+      },
+      {
+        "departed": 1017176,
+        "arrived": 1017177,
+        "delayMs": 1
+      },
+      {
+        "departed": 1030834,
+        "arrived": 1030834,
+        "delayMs": 0
+      },
+      {
+        "departed": 1041774,
+        "arrived": 1041779,
+        "delayMs": 5
+      },
+      {
+        "departed": 1081300,
+        "arrived": 1081300,
+        "delayMs": 0
+      },
+      {
+        "departed": 1090224,
+        "arrived": 1090230,
+        "delayMs": 6
+      },
+      {
+        "departed": 1101108,
+        "arrived": 1101108,
+        "delayMs": 0
+      },
+      {
+        "departed": 1114645,
+        "arrived": 1114652,
+        "delayMs": 7
+      },
+      {
+        "departed": 1170378,
+        "arrived": 1170389,
+        "delayMs": 11
+      },
+      {
+        "departed": 1198969,
+        "arrived": 1198970,
+        "delayMs": 1
+      },
+      {
+        "departed": 1199004,
+        "arrived": 1199018,
+        "delayMs": 14
+      },
+      {
+        "departed": 1199024,
+        "arrived": 1199027,
+        "delayMs": 3
+      },
+      {
+        "departed": 1199088,
+        "arrived": 1199089,
+        "delayMs": 1
+      }
+    ]
+  }
+}

@@ -9,6 +9,7 @@ resource tiles, rubble, and other objects cannot relocate a player.
 from __future__ import annotations
 
 import argparse
+import csv
 import bisect
 import json
 from collections import Counter, defaultdict
@@ -168,7 +169,7 @@ def choose_player(
 
 
 def build_base_actors(
-    players: list[list[Any]], bases: list[list[Any]], base_ids: list[str]
+    players: list[list[Any]], bases: list[list[Any]], base_ids: list[str], base_owners=None
 ) -> tuple[list[list[Any]], list[int]]:
     """Merge changing map-point IDs into persistent logical player actors."""
     players_by_name: dict[str, list[int]] = defaultdict(list)
@@ -181,7 +182,10 @@ def build_base_actors(
     instance_actors: list[int] = []
 
     for instance, base in enumerate(bases):
-        player = choose_player(base, players, players_by_name)
+        owner = (base_owners or {}).get(base_ids[instance])
+        player = next((i for i, p in enumerate(players) if owner and p[0] == owner), -1)
+        if player < 0 and not owner:
+            player = choose_player(base, players, players_by_name)
         name, abbr, server, alliance = base
         if player >= 0:
             key: tuple[Any, ...] = ("player", player)
@@ -420,12 +424,14 @@ def convert(
     chunk_ms: int,
     start_at: int | None = None,
     end_at: int | None = None,
+    identity_csv: Path | None = None,
 ) -> dict[str, Any]:
     march_ids = Index()
     team_ids = Index()
     base_ids = Index()
     player_by_uid: dict[str, int] = {}
     players: list[list[Any]] = []
+    base_owners = {}
     bases: list[list[Any]] = []
     events: list[list[Any]] = []
     capture_samples: list[list[int]] = []
@@ -591,6 +597,8 @@ def convert(
                     base_id = first(
                         point.get("f100"), details.get("f2"), f"position:{position}"
                     )
+                    if isinstance(details.get("f1"), str):
+                        base_owners[str(base_id)] = str(details["f1"])
                     base_index = base_ids.add(base_id)
                     while len(bases) <= base_index:
                         bases.append(["", "", 0, ""])
@@ -652,6 +660,8 @@ def convert(
                         incoming[i] if incoming[i] not in ("", 0) else existing[i]
                         for i in range(4)
                     ]
+                    if isinstance(details.get("f1"), str):
+                        base_owners[str(base_id)] = str(details["f1"])
                     events.append([2, event_time, BASE_CREATE, base_index, as_int(position), base_index])
                     counts["baseUpdates"] += 1
 
@@ -669,7 +679,27 @@ def convert(
     if start is None or end is None:
         raise ValueError(f"no valid records in {source}")
 
-    actors, instance_actors = build_base_actors(players, bases, base_ids.values)
+    # Generic decoding can mistake UTF-8 names and UIDs for nested protobuf.
+    # An optional analyzed movement ledger supplies capture-local identities.
+    if identity_csv:
+        identity_rows = {}
+        owners = defaultdict(set)
+        with identity_csv.open(encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                if row.get("base_uuid") and row.get("uid"):
+                    owners[row["base_uuid"]].add(row["uid"])
+                    identity_rows[row["base_uuid"]] = row
+        for index, base_id in enumerate(base_ids.values):
+            if len(owners[base_id]) != 1:
+                continue
+            row = identity_rows[base_id]
+            base_owners[base_id] = row["uid"]
+            bases[index] = [row["player_name"], row["alliance"], as_int(row["server"]), bases[index][3]]
+    actors, instance_actors = build_base_actors(players, bases, base_ids.values, base_owners)
+    for actor in actors:
+        if actor[4] >= 0:
+            player = players[actor[4]]
+            actor[:4] = [actor[0] or player[1], actor[1] or player[2], actor[2] or player[3], player[4] or actor[3]]
     for event in events:
         if event[0] == 2 and event[3] >= 0:
             event[3] = instance_actors[event[3]]
@@ -761,6 +791,7 @@ def main() -> None:
     parser.add_argument("--chunk-minutes", type=int, default=5)
     parser.add_argument("--start-utc", help="optional inclusive RFC3339 replay start")
     parser.add_argument("--end-utc", help="optional inclusive RFC3339 replay end")
+    parser.add_argument("--identity-csv", type=Path, help="Analyzed base_movements.csv from the same capture")
     args = parser.parse_args()
     if args.chunk_minutes < 1:
         parser.error("--chunk-minutes must be at least 1")
@@ -768,7 +799,7 @@ def main() -> None:
     end_at = parse_time(args.end_utc) if args.end_utc else None
     if start_at is not None and end_at is not None and end_at <= start_at:
         parser.error("--end-utc must be later than --start-utc")
-    convert(args.source, args.output, args.chunk_minutes * 60_000, start_at, end_at)
+    convert(args.source, args.output, args.chunk_minutes * 60_000, start_at, end_at, args.identity_csv)
 
 
 if __name__ == "__main__":
