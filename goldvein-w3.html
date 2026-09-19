@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Interactive static replay of player bases, teleports and army marches across the Last War world map.">
+<title>Gold Vein · Week 3 — Heimdall</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="heimdall.css?v=20260919-w3">
+</head>
+<body class="replay-page">
+  <main class="replay-shell">
+    <header class="replay-header">
+      <a class="back" href="heimdall-battles.html">&larr; Battles</a>
+      <div>
+        <div class="eyebrow">Heimdall &middot; The All-Seeing One</div>
+        <h1 id="battleTitle">Battle Replay</h1>
+      </div>
+      <div class="load-state" id="loadState" role="status">Loading manifest…</div>
+    </header>
+
+    <section class="integrity-notice" id="integrityNotice" aria-labelledby="integrityTitle" hidden>
+      <div class="integrity-mark" aria-hidden="true">!</div>
+      <div>
+        <div class="eyebrow">Coverage integrity</div>
+        <h2 id="integrityTitle">Incomplete observation window</h2>
+        <p id="integrityText"></p>
+      </div>
+      <strong id="integrityState">Observed data</strong>
+    </section>
+
+    <section class="replay-stage" aria-label="Interactive world map replay">
+      <canvas id="map" tabindex="0" aria-label="World map. Drag to pan, pinch or use the zoom controls to zoom, and tap a march or base for details."></canvas>
+      <div class="map-key" aria-hidden="true">
+        <span><i class="key-base"></i>Observed base</span>
+        <span><i class="key-inferred"></i>Inferred</span>
+        <span><i class="key-march"></i>March</span>
+        <span><i class="key-target"></i>Route</span>
+        <span><i class="key-capitol"></i>Capitol</span>
+        <span><i class="key-blocked"></i>No teleport</span>
+      </div>
+      <div class="map-help">Drag to pan · Wheel or pinch to zoom · Click for details</div>
+      <div class="map-zoom" aria-label="Map zoom controls">
+        <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+        <button id="zoomOut" type="button" aria-label="Zoom out">&minus;</button>
+      </div>
+      <div class="map-compass" aria-label="Map orientation: north is up, south is down">
+        <span>N</span><i aria-hidden="true"></i><span>S</span>
+      </div>
+      <aside class="inspector" id="inspector" hidden>
+        <button class="inspector-close" id="closeInspector" aria-label="Close details">&times;</button>
+        <div class="eyebrow" id="inspectorKind"></div>
+        <h2 id="inspectorTitle"></h2>
+        <dl id="inspectorDetails"></dl>
+      </aside>
+    </section>
+
+    <section class="capture-progress" id="captureProgress" aria-labelledby="captureTitle" hidden>
+      <div class="capture-heading">
+        <div>
+          <div class="eyebrow">Capitol occupation</div>
+          <h2 id="captureTitle">Capture progress</h2>
+        </div>
+        <span id="captureStatus">Awaiting occupation</span>
+      </div>
+      <div class="capture-bars">
+        <div class="capture-row" id="captureRowA">
+          <span class="capture-server" id="captureServerA">S---</span>
+          <div class="capture-track" id="captureTrackA" role="progressbar" aria-label="First server capture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i id="captureFillA"></i>
+          </div>
+          <strong id="captureValueA">0%</strong>
+        </div>
+        <div class="capture-row" id="captureRowB">
+          <span class="capture-server" id="captureServerB">S---</span>
+          <div class="capture-track" id="captureTrackB" role="progressbar" aria-label="Second server capture progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <i id="captureFillB"></i>
+          </div>
+          <strong id="captureValueB">0%</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="transport" aria-label="Replay controls">
+      <div class="transport-main">
+        <button class="play" id="play" type="button" aria-label="Play replay" disabled>
+          <span id="playIcon">▶</span>
+        </button>
+        <div class="clock">
+          <strong id="clock">--:--:--</strong>
+          <span id="elapsed">+00:00</span>
+        </div>
+        <label class="timeline-label" for="timeline">Replay position</label>
+        <input id="timeline" class="timeline" type="range" min="0" max="1" value="0" step="100" disabled>
+        <label class="speed-label" for="speed">Speed</label>
+        <select id="speed" class="speed">
+          <option value="1">1×</option>
+          <option value="5">5×</option>
+          <option value="15">15×</option>
+          <option value="30" selected>30×</option>
+          <option value="60">60×</option>
+          <option value="120">120×</option>
+        </select>
+      </div>
+      <div class="transport-meta">
+        <span><b id="activeMarches">0</b> active marches</span>
+        <span><b id="visibleBases">0</b> bases (<b id="confirmedBases">0</b> observed · <b id="inferredBases">0</b> inferred)</span>
+        <span><b id="eventCount">0</b> events</span>
+      </div>
+    </section>
+
+    <section class="filters" aria-label="Map filters">
+      <label><input id="showBases" type="checkbox" checked> Bases</label>
+      <label><input id="showInferred" type="checkbox" checked> Inferred bases</label>
+      <label><input id="showRoutes" type="checkbox" checked> Route arrows</label>
+      <label><input id="showLabels" type="checkbox"> Alliance labels</label>
+      <label><input id="showCapitol" type="checkbox" checked> Capitol layout</label>
+      <label for="serverFilter">Server</label>
+      <select id="serverFilter"><option value="all">All servers</option></select>
+      <button id="resetView" type="button">Reset view</button>
+    </section>
+
+    <section class="palette-panel" aria-label="Map color controls">
+      <label for="colorMode">Colors</label>
+      <select id="colorMode">
+        <option value="server" selected>Two camps</option>
+        <option value="alliance">Each alliance</option>
+        <option value="spotlight">Spotlight alliance</option>
+      </select>
+      <div class="side-controls" id="sideControls">
+        <label class="color-choice" for="sideAServer">
+          <input id="sideAColor" type="color" value="#43c6f0" aria-label="First server color">
+          <select id="sideAServer" aria-label="First server"></select>
+        </label>
+        <label class="color-choice" for="sideBServer">
+          <input id="sideBColor" type="color" value="#ff5d5d" aria-label="Second server color">
+          <select id="sideBServer" aria-label="Second server"></select>
+        </label>
+      </div>
+      <label for="highlightAlliance">Alliance override</label>
+      <select id="highlightAlliance"><option value="">None</option></select>
+      <input id="highlightColor" type="color" value="#ffd166" aria-label="Highlighted alliance color">
+    </section>
+
+    <noscript>This replay requires JavaScript.</noscript>
+  </main>
+  <script src="heimdall.js?v=20260912-no-visible-uids"></script>
+</body>
+</html>

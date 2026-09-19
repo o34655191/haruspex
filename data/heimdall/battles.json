@@ -3,6 +3,67 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "goldvein-w3",
+      "href": "goldvein-w3.html",
+      "title": "Gold Vein · Week 3 · 3 vs 5",
+      "date": "2026-09-19",
+      "start": 1789824600000,
+      "duration": 5400000,
+      "events": 446360,
+      "marches": 219966,
+      "servers": [
+        472,
+        539
+      ],
+      "allowedServers": [
+        497,
+        472,
+        533,
+        539,
+        455,
+        535,
+        461,
+        444
+      ],
+      "sideLabels": [
+        "Camp 1 · S497 / S472 / S533",
+        "Camp 2 · S539 / S455 / S535 / S461 / S444"
+      ],
+      "sideGroups": [
+        {
+          "name": "Camp 1",
+          "servers": [
+            497,
+            472,
+            533
+          ]
+        },
+        {
+          "name": "Camp 2",
+          "servers": [
+            539,
+            455,
+            535,
+            461,
+            444
+          ]
+        }
+      ],
+      "layout": "none",
+      "note": "Week 3 · observed reconstruction · opening missing",
+      "integrity": {
+        "title": "Observed reconstruction — coverage not certified",
+        "message": "Capture begins at 18:46:16 (UTC+5); the requested 18:30 opening is unavailable. TCP retransmissions and out-of-order packets were not sequence-reassembled by the original decoder. 31 point-update records failed raw point repair and were excluded. Initial bases use four opening snapshots; movement is interpolated and later activity is observed evidence, not a complete battle history.",
+        "gaps": [
+          {
+            "start": 1789824600000,
+            "end": 1789825576496,
+            "reason": "Before the first decoded capture record"
+          }
+        ]
+      }
+    },
+    {
       "id": "goldvein-w2",
       "events": 501426,
       "marches": 251651,

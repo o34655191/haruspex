@@ -1,0 +1,342 @@
+{
+  "version": 1,
+  "source": "replay.ndjson",
+  "summary": {
+    "foldUpAtUnknownPosition": 6120,
+    "sameActorMovedWithoutDeparture": 3354,
+    "inferredBasePlacements": 630,
+    "foldUpAtKnownBase": 16430,
+    "genericRemovePositions": 18677,
+    "pairedRelocations": 15333,
+    "pairedWithinOneSecond": 14290,
+    "overlapEvictions": 131,
+    "lateUnpairedReappearance": 395,
+    "genericRemoveAtKnownBase": 10,
+    "logicalBaseActors": 1957,
+    "actorsLinkedToMarchPlayers": 1922,
+    "marchPlayers": 2090,
+    "marchPlayersWithObservedBase": 1922,
+    "unresolvedMarchPlayers": 168
+  },
+  "pointOperations": {
+    "create": 6477,
+    "change": 118764,
+    "foldUp": 22550,
+    "relocate": 17211,
+    "remove": 18677
+  },
+  "pointEntityKinds": {
+    "58": 144,
+    "57": 94,
+    "6": 138444,
+    "55": 835,
+    "56": 38,
+    "38": 1511,
+    "-1": 1503,
+    "7": 3
+  },
+  "semantics": {
+    "create": "observed player appearance",
+    "change": "observed player refresh in place",
+    "relocate": "observed player arrival",
+    "foldUp": "observed vacancy at an old player anchor",
+    "remove": "generic map-object removal; does not mutate player state",
+    "inferred": "march candidate confirmed by a later player point within five minutes"
+  },
+  "assumptions": [
+    "Only point entity type 6 is a player base.",
+    "The packed player point is the centre anchor of a 3x3 footprint.",
+    "foldUp alone does not distinguish voluntary and forced relocation.",
+    "Four opening world.get.block snapshots seed initial player positions; later repeated snapshots are omitted.",
+    "31 raw point-repair failures excluded. Source decoding is not certified lossless."
+  ],
+  "samples": {
+    "genericRemoveAtPlayer": [
+      {
+        "time": 1867846,
+        "position": 486479,
+        "actors": [
+          413
+        ]
+      },
+      {
+        "time": 2079155,
+        "position": 117640,
+        "actors": [
+          1142
+        ]
+      },
+      {
+        "time": 2127112,
+        "position": 618603,
+        "actors": [
+          451
+        ]
+      },
+      {
+        "time": 2357053,
+        "position": 139406,
+        "actors": [
+          229
+        ]
+      },
+      {
+        "time": 2922911,
+        "position": 904302,
+        "actors": [
+          448
+        ]
+      },
+      {
+        "time": 3301477,
+        "position": 712630,
+        "actors": [
+          1677
+        ]
+      },
+      {
+        "time": 3965719,
+        "position": 857554,
+        "actors": [
+          1773
+        ]
+      },
+      {
+        "time": 4063592,
+        "position": 132489,
+        "actors": [
+          1461
+        ]
+      },
+      {
+        "time": 4733541,
+        "position": 423387,
+        "actors": [
+          537
+        ]
+      },
+      {
+        "time": 5168881,
+        "position": 111461,
+        "actors": [
+          302
+        ]
+      }
+    ],
+    "overlapEvictions": [
+      {
+        "time": 1423997,
+        "position": 349591,
+        "evicted": 349591
+      },
+      {
+        "time": 1477383,
+        "position": 349581,
+        "evicted": 349581
+      },
+      {
+        "time": 1698533,
+        "position": 442486,
+        "evicted": 442486
+      },
+      {
+        "time": 1723206,
+        "position": 546552,
+        "evicted": 546552
+      },
+      {
+        "time": 1812268,
+        "position": 626650,
+        "evicted": 627650
+      },
+      {
+        "time": 1816263,
+        "position": 551500,
+        "evicted": 553502
+      },
+      {
+        "time": 1820755,
+        "position": 549591,
+        "evicted": 549592
+      },
+      {
+        "time": 1861353,
+        "position": 649570,
+        "evicted": 649570
+      },
+      {
+        "time": 1867846,
+        "position": 486479,
+        "evicted": 486479
+      },
+      {
+        "time": 1882505,
+        "position": 749200,
+        "evicted": 749202
+      },
+      {
+        "time": 1910058,
+        "position": 484525,
+        "evicted": 483525
+      },
+      {
+        "time": 1921008,
+        "position": 607582,
+        "evicted": 607582
+      },
+      {
+        "time": 1983421,
+        "position": 512555,
+        "evicted": 512555
+      },
+      {
+        "time": 2001141,
+        "position": 550546,
+        "evicted": 551546
+      },
+      {
+        "time": 2001252,
+        "position": 563593,
+        "evicted": 563593
+      },
+      {
+        "time": 2050582,
+        "position": 458503,
+        "evicted": 457503
+      },
+      {
+        "time": 2055864,
+        "position": 591609,
+        "evicted": 590609
+      },
+      {
+        "time": 2057325,
+        "position": 612630,
+        "evicted": 613630
+      },
+      {
+        "time": 2099418,
+        "position": 649627,
+        "evicted": 649627
+      },
+      {
+        "time": 2133625,
+        "position": 551537,
+        "evicted": 551537
+      }
+    ],
+    "pairedRelocations": [
+      {
+        "departed": 1317922,
+        "arrived": 1317930,
+        "delayMs": 8
+      },
+      {
+        "departed": 1425356,
+        "arrived": 1425364,
+        "delayMs": 8
+      },
+      {
+        "departed": 1427947,
+        "arrived": 1427951,
+        "delayMs": 4
+      },
+      {
+        "departed": 1450258,
+        "arrived": 1493614,
+        "delayMs": 43356
+      },
+      {
+        "departed": 1783989,
+        "arrived": 1784097,
+        "delayMs": 108
+      },
+      {
+        "departed": 1796558,
+        "arrived": 1796563,
+        "delayMs": 5
+      },
+      {
+        "departed": 1796631,
+        "arrived": 1796631,
+        "delayMs": 0
+      },
+      {
+        "departed": 1796774,
+        "arrived": 1796783,
+        "delayMs": 9
+      },
+      {
+        "departed": 1797015,
+        "arrived": 1797019,
+        "delayMs": 4
+      },
+      {
+        "departed": 1797226,
+        "arrived": 1797259,
+        "delayMs": 33
+      },
+      {
+        "departed": 1797347,
+        "arrived": 1797368,
+        "delayMs": 21
+      },
+      {
+        "departed": 1797490,
+        "arrived": 1797527,
+        "delayMs": 37
+      },
+      {
+        "departed": 1797590,
+        "arrived": 1797596,
+        "delayMs": 6
+      },
+      {
+        "departed": 1797597,
+        "arrived": 1797603,
+        "delayMs": 6
+      },
+      {
+        "departed": 1798092,
+        "arrived": 1798108,
+        "delayMs": 16
+      },
+      {
+        "departed": 1798230,
+        "arrived": 1798254,
+        "delayMs": 24
+      },
+      {
+        "departed": 1798431,
+        "arrived": 1798443,
+        "delayMs": 12
+      },
+      {
+        "departed": 1798406,
+        "arrived": 1798449,
+        "delayMs": 43
+      },
+      {
+        "departed": 1798653,
+        "arrived": 1798673,
+        "delayMs": 20
+      },
+      {
+        "departed": 1798653,
+        "arrived": 1798675,
+        "delayMs": 22
+      }
+    ]
+  },
+  "integrity": {
+    "title": "Observed reconstruction — coverage not certified",
+    "message": "Capture begins at 18:46:16 (UTC+5); the requested 18:30 opening is unavailable. TCP retransmissions and out-of-order packets were not sequence-reassembled by the original decoder. 31 point-update records failed raw point repair and were excluded. Initial bases use four opening snapshots; movement is interpolated and later activity is observed evidence, not a complete battle history.",
+    "gaps": [
+      {
+        "start": 1789824600000,
+        "end": 1789825576496,
+        "reason": "Before the first decoded capture record"
+      }
+    ]
+  }
+}
