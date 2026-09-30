@@ -349,3 +349,10 @@ test("connect retries when the socket cannot even be constructed", () => {
   assert.deepEqual(h.seen.states, ["connecting", "waiting"]);
   assert.equal(h.timers.size, 1);
 });
+
+test("live feed preserves PvE, rally, return, and unknown movement targets", () => {
+  const targets = [1, 2, 3, 6, 7, 9, 33, 37, 999];
+  const events = targets.map((target, id) => [0, 1000, id, 0, 0, 586237, 587238, 1000, 9000, target, 0, 4]);
+  const parsed = live.parseMessage(JSON.stringify({ type: "ev", t: 1000, events }));
+  assert.deepEqual(parsed.events, events);
+});

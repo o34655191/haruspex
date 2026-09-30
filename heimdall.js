@@ -251,7 +251,12 @@
 
   function marchActionName(targetKind) {
     return ({
-      1: "Base attack", 6: "Base attack", 11: "Base attack", 12: "Base rally",
+      0: "Stationary", 1: "Monster attack", 2: "Resource gathering", 3: "Returning home",
+      4: "Building attack", 5: "Army attack", 6: "Joining rally", 7: "Boss rally",
+      8: "Building rally", 9: "Roaming", 10: "Gathering army attack",
+      11: "Base attack", 12: "Base rally", 13: "Building reinforcement", 14: "Base reinforcement",
+      17: "Base scout", 18: "Building scout", 19: "Gathering army scout",
+      33: "Event boss attack", 37: "Train movement",
       111: "Rubble clear", 178: "Structure attack", 179: "Structure reinforce",
       180: "Structure scout", 181: "Structure rally attack", 194: "Special objective attack",
     })[targetKind] || `Target kind ${targetKind}`;
