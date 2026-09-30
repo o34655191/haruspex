@@ -18,6 +18,11 @@
   // would close an open dropdown.
   const LIVE_SELECT_BUSY_MS = 8000;
   const CURATED_PLAYERS = ["extradamage", "aloha1234"];
+  const MAX_ZOOM = 20;
+  // How far past the warzone's edge the view may pan or zoom out, as a share
+  // of the warzone's width.
+  const VIEW_MARGIN = .12;
+  const CAMERA_STATE_COLORS = { live: "#8de0b5", connecting: "#ffd166", stale: "#ffd166", down: "#ff5d5d" };
   const canvas = document.getElementById("map");
   const ctx = canvas.getContext("2d", { alpha: false });
   const ui = Object.fromEntries([
@@ -149,10 +154,22 @@
     ctx.restore();
   }
 
-  function campColor(server, alpha = 1) {
+  // campOf is 0 for side A, 1 for side B and -1 for neither. Replays split by
+  // the battle's camps (or the two chosen servers); live splits the home
+  // server from every foreign one.
+  function campOf(server) {
+    const value = Number(server);
+    if (live) return !value ? -1 : value === Number(ui.sideAServer.value) ? 0 : 1;
     const groups = battle?.sideGroups || [];
-    if ((groups[0]?.servers || [Number(ui.sideAServer.value)]).includes(Number(server))) return hexColor(ui.sideAColor.value, alpha);
-    if ((groups[1]?.servers || [Number(ui.sideBServer.value)]).includes(Number(server))) return hexColor(ui.sideBColor.value, alpha);
+    if ((groups[0]?.servers || [Number(ui.sideAServer.value)]).includes(value)) return 0;
+    if ((groups[1]?.servers || [Number(ui.sideBServer.value)]).includes(value)) return 1;
+    return -1;
+  }
+
+  function campColor(server, alpha = 1) {
+    const camp = campOf(server);
+    if (camp === 0) return hexColor(ui.sideAColor.value, alpha);
+    if (camp === 1) return hexColor(ui.sideBColor.value, alpha);
     return hexColor("#657486", alpha);
   }
 
@@ -208,12 +225,7 @@
     }
     if (playerIndex >= 0 && focusUI?.featuredVisible.checked && featuredPlayers.has(playerIndex)) return campColor(server, alpha);
     if (ui.colorMode.value === "spotlight" && ui.highlightAlliance.value) alpha *= .22;
-    const sideGroups = battle?.sideGroups || [];
-    const sideA = sideGroups[0]?.servers || [Number(ui.sideAServer.value)];
-    const sideB = sideGroups[1]?.servers || [Number(ui.sideBServer.value)];
-    if (sideA.includes(Number(server))) return hexColor(ui.sideAColor.value, alpha);
-    if (sideB.includes(Number(server))) return hexColor(ui.sideBColor.value, alpha);
-    return hexColor("#657486", alpha * .62);
+    return campOf(server) === -1 ? hexColor("#657486", alpha * .62) : campColor(server, alpha);
   }
 
   function playerFor(index) {
@@ -510,10 +522,33 @@
     redrawNeeded = true;
   }
 
+  const warzoneSize = () => manifest?.mapWidth || 1000;
+
+  // The smallest zoom still shows the whole warzone plus VIEW_MARGIN on each
+  // side along the screen's shorter axis.
+  function minZoom(width, height) {
+    return Math.min(width, height) / (warzoneSize() * (1 + 2 * VIEW_MARGIN));
+  }
+
+  // constrainView keeps the warzone in sight: no zooming out past it and its
+  // margin, and no panning the view further than the margin beyond its edge.
+  function constrainView(width, height) {
+    camera.zoom = clamp(camera.zoom, minZoom(width, height), MAX_ZOOM);
+    const size = warzoneSize();
+    const margin = size * VIEW_MARGIN;
+    const axis = (center, span) => {
+      const low = -margin + span / 2;
+      const high = size + margin - span / 2;
+      return low > high ? size / 2 : clamp(center, low, high);
+    };
+    camera.x = axis(camera.x, width / camera.zoom);
+    camera.y = axis(camera.y, height / camera.zoom);
+  }
+
   function zoomAt(x, y, nextZoom) {
     const { width, height } = screenSize();
     const before = toWorld(x, y, width, height);
-    camera.zoom = clamp(nextZoom, .25, 20);
+    camera.zoom = clamp(nextZoom, minZoom(width, height), MAX_ZOOM);
     const after = toWorld(x, y, width, height);
     camera.x += before.x - after.x;
     camera.y += before.y - after.y;
@@ -553,6 +588,40 @@
       Math.abs(cornerB.x - cornerA.x),
       Math.abs(cornerB.y - cornerA.y),
     );
+  }
+
+  // drawCameraAreas outlines what each live camera watches, coloured by its
+  // state, and dims the rest of the warzone, where nothing is observed.
+  function drawCameraAreas(width, height) {
+    const watched = live ? live.cameras.filter(camera => camera.area) : [];
+    if (!watched.length) return;
+    const box = ({ left, bottom, right, top }) => {
+      const a = toScreen(left, bottom, width, height);
+      const b = toScreen(right, top, width, height);
+      return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(b.x - a.x), h: Math.abs(b.y - a.y) };
+    };
+    const size = warzoneSize();
+    ctx.save();
+    ctx.beginPath();
+    for (const rect of [box({ left: 0, bottom: 0, right: size, top: size }), ...watched.map(camera => box(camera.area))]) {
+      ctx.rect(rect.x, rect.y, rect.w, rect.h);
+    }
+    ctx.fillStyle = "rgba(0,0,0,.34)";
+    ctx.fill("evenodd");
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([8, 5]);
+    ctx.font = "10px ui-monospace, monospace";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    for (const camera of watched) {
+      const rect = box(camera.area);
+      const color = CAMERA_STATE_COLORS[camera.state] || CAMERA_STATE_COLORS.down;
+      ctx.strokeStyle = hexColor(color, .85);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.fillStyle = hexColor(color, .95);
+      ctx.fillText(`CAMERA ${camera.camera.toUpperCase()} · ${camera.state.toUpperCase()}`, rect.x + 6, rect.y + 6);
+    }
+    ctx.restore();
   }
 
   function mapPath(points, width, height) {
@@ -739,6 +808,7 @@
     }
     resizeCanvas();
     const { width, height, ratio } = screenSize();
+    constrainView(width, height);
     ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
     drawGrid(width, height);
     const gap = manifest ? integrityGapAt(manifest.start + currentTime) : null;
@@ -763,6 +833,7 @@
       redrawNeeded = false;
       return;
     }
+    drawCameraAreas(width, height);
     drawCapitol(width, height);
     // Discrete breadcrumbs, never a fabricated path between teleports.
     const trail = (playerObservations.get(selectedPlayer) || []).filter(p => p.time <= currentTime && p.time >= currentTime - 300000 && !integrityGapAt(manifest.start + p.time));
@@ -979,11 +1050,24 @@
   function mountLiveControls() {
     ui.showInferred.closest("label").hidden = true;
     document.querySelector(".key-inferred")?.closest("span")?.remove();
-    const shieldKey = document.createElement("span");
-    const swatch = document.createElement("i");
-    swatch.className = "key-shield";
-    shieldKey.append(swatch, "Shield");
-    document.querySelector(".map-key")?.append(shieldKey);
+    for (const [className, label] of [["key-shield", "Shield"], ["key-camera", "Camera area"]]) {
+      const key = document.createElement("span");
+      const swatch = document.createElement("i");
+      swatch.className = className;
+      key.append(swatch, label);
+      document.querySelector(".map-key")?.append(key);
+    }
+    // Live colours split the home server from every foreign one (campOf).
+    const campOption = ui.colorMode.querySelector('option[value="server"]');
+    if (campOption) campOption.textContent = "Home vs foreign";
+    ui.sideAServer.setAttribute("aria-label", "Home server");
+    ui.sideAColor.setAttribute("aria-label", "Home server color");
+    ui.sideBColor.setAttribute("aria-label", "Foreign servers color");
+    ui.sideBServer.hidden = true;
+    const foreign = document.createElement("span");
+    foreign.className = "foreign-label";
+    foreign.textContent = "Foreign";
+    ui.sideBServer.after(foreign);
     const eyebrow = ui.integrityNotice.querySelector(".eyebrow");
     if (eyebrow) eyebrow.textContent = "Live feed";
     live.chips = document.createElement("div");
@@ -1007,6 +1091,13 @@
     if (message.t) live.lastDataT = message.type === "snap" ? message.t : Math.max(live.lastDataT, message.t);
     if (message.type === "status") {
       live.cameras = message.cameras;
+      // The watched server is the natural home side, unless the viewer
+      // picked one already (populateServers keeps a previous choice).
+      const home = message.cameras.find(camera => camera.area?.server)?.area.server;
+      if (home && battle.servers?.[0] !== home) {
+        battle.servers = [home];
+        live.rosterDirty = true;
+      }
       renderCameraChips();
       renderLiveStatus();
       return;
@@ -1354,7 +1445,7 @@
       const x = (first.x + second.x) / 2 - rect.left;
       const y = (first.y + second.y) / 2 - rect.top;
       const distance = Math.max(1, Math.hypot(second.x - first.x, second.y - first.y));
-      camera.zoom = clamp(pinch.zoom * distance / pinch.distance, .25, 20);
+      camera.zoom = clamp(pinch.zoom * distance / pinch.distance, minZoom(width, height), MAX_ZOOM);
       const after = toWorld(x, y, width, height);
       camera.x += pinch.world.x - after.x;
       camera.y += pinch.world.y - after.y;

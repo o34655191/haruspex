@@ -97,9 +97,21 @@ test("parseMessage keeps well-formed rows, events and cameras and drops the rest
   ]);
   assert.deepEqual(message.events.map(event => event[0]), [2, 0, 1]);
   assert.deepEqual(message.cameras, [
-    { camera: "se", state: "live", detail: "" },
-    { camera: "nw", state: "down", detail: "" },
+    { camera: "se", state: "live", detail: "", area: null },
+    { camera: "nw", state: "down", detail: "", area: null },
   ]);
+});
+
+test("parseMessage keeps a camera's area only when it is a real rectangle", () => {
+  const areaOf = area => live.parseMessage(JSON.stringify({ type: "status", cameras: [{ camera: "se", state: "live", area }] })).cameras[0].area;
+  assert.deepEqual(areaOf({ server: 472, left: 0, bottom: 300, right: 500, top: 900 }), { server: 472, left: 0, bottom: 300, right: 500, top: 900 });
+  assert.deepEqual(areaOf({ left: 1, bottom: 1, right: 2, top: 2 }), { server: 0, left: 1, bottom: 1, right: 2, top: 2 }, "server is optional");
+  assert.equal(areaOf({ server: 472, left: 500, bottom: 300, right: 500, top: 900 }), null, "empty width");
+  assert.equal(areaOf({ server: 472, left: 0, bottom: 900, right: 500, top: 300 }), null, "upside down");
+  assert.equal(areaOf({ server: 472, left: -1, bottom: 0, right: 5, top: 5 }), null);
+  assert.equal(areaOf({ server: 472, left: 0, bottom: 0, right: 1e9, top: 5 }), null);
+  assert.equal(areaOf({ server: 472, left: "0", bottom: 0, right: 5, top: 5 }), null);
+  assert.equal(areaOf("0,0,5,5"), null);
 });
 
 test("parseMessage drops rows without a uid and indices past the cap", () => {

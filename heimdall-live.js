@@ -21,6 +21,7 @@
   // Packed positions (x + mapWidth·y) stay far below this on any real map;
   // the cap keeps a corrupt value from wrecking the view.
   const MAX_POSITION = 10000000;
+  const MAX_AREA_COORD = 10000;
   const DEV_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
   const MIN_EVENT_LENGTH = new Map([[0, 12], [1, 3], [2, 5]]);
   const POSITION_SLOTS = new Map([[0, [5, 6]], [1, []], [2, [4]]]);
@@ -73,6 +74,16 @@
       && POSITION_SLOTS.get(event[0]).every(slot => validPosition(event[slot])));
   }
 
+  // validArea checks the rectangle a camera watches: local tiles, with the
+  // right and top edges exclusive. Anything else means "area unknown".
+  function validArea(area) {
+    if (!area || typeof area !== "object") return null;
+    const { server, left, bottom, right, top } = area;
+    const inMap = value => Number.isInteger(value) && value >= 0 && value <= MAX_AREA_COORD;
+    if (![left, bottom, right, top].every(inMap) || right <= left || top <= bottom) return null;
+    return { server: Number.isInteger(server) && server > 0 ? server : 0, left, bottom, right, top };
+  }
+
   function validCameras(cameras) {
     if (!Array.isArray(cameras)) return [];
     return cameras
@@ -81,6 +92,7 @@
         camera: camera.camera,
         state: CAMERA_STATES.has(camera.state) ? camera.state : "down",
         detail: typeof camera.detail === "string" ? camera.detail : "",
+        area: validArea(camera.area),
       }));
   }
 
