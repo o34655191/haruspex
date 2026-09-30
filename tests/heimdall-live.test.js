@@ -53,6 +53,8 @@ test("relayUrl uses the public relay unless a local dev page overrides it", () =
   assert.equal(live.relayUrl("http://127.0.0.1:8000/heimdall.html?live&relay=wss://heimdall.tailc3e099.ts.net/ws"), relay);
   assert.equal(live.relayUrl("http://localhost:8000/heimdall.html?live&relay=http://127.0.0.1:8082/ws"), relay);
   assert.equal(live.relayUrl("http://localhost:8000/heimdall.html?live&relay=not a url"), relay);
+  assert.equal(live.relayUrl("http://[::1]:8000/heimdall.html?live&relay=ws://[::1]:8082/ws"), "ws://[::1]:8082/ws");
+  assert.equal(live.relayUrl("http://localhost.evil.com/heimdall.html?live&relay=ws://evil.com/ws"), relay);
 });
 
 test("retryDelay doubles from one second, caps at thirty and keeps half as a floor", () => {
@@ -98,6 +100,35 @@ test("parseMessage keeps well-formed rows, events and cameras and drops the rest
     { camera: "se", state: "live", detail: "" },
     { camera: "nw", state: "down", detail: "" },
   ]);
+});
+
+test("parseMessage drops rows without a uid and indices past the cap", () => {
+  const message = live.parseMessage(JSON.stringify({
+    type: "ev",
+    players: [[99999, "u1", "A", "B", 1], [100000, "u2"], [3, ""], [4, { nested: [1] }, "n"], [5.5, "u3"]],
+  }));
+  assert.deepEqual(message.players.map(row => row.index), [99999]);
+});
+
+test("parseMessage drops events whose positions are off any real map", () => {
+  const message = live.parseMessage(JSON.stringify({
+    type: "ev",
+    events: [
+      [2, 1, 0, 1, 999999, 0, 0],
+      [2, 1, 0, 1, -1, 0, 0],
+      [2, 1, 0, 1, 1e21, 0, 0],
+      [2, 1, 0, 1, 10.5, 0, 0],
+      [0, 1, 2, 0, 1, 10, 20000000, 0, 1000, 1, 0, 0.5],
+      [0, 1, 2, 0, 1, 10, 20, 0, 1000, 1, 0, 0.5],
+    ],
+  }));
+  assert.deepEqual(message.events.map(event => [event[0], event[4]]), [[2, 999999], [0, 1]]);
+});
+
+test("parseMessage rejects a top-level array and ignores a bad clock", () => {
+  assert.equal(live.parseMessage("[1,2]"), null);
+  assert.equal(live.parseMessage(JSON.stringify({ type: "ev", t: "soon" })).t, 0);
+  assert.equal(live.parseMessage(JSON.stringify({ type: "ev", t: -5 })).t, 0);
 });
 
 test("parseMessage defaults a missing clock and map width to zero", () => {
@@ -209,13 +240,52 @@ test("reconnectNow skips the wait, and stop closes without reconnecting", () => 
   feed.reconnectNow();
   assert.equal(h.timers.size, 0);
   assert.equal(FakeSocket.instances.length, 2);
-  feed.reconnectNow();
-  assert.equal(FakeSocket.instances.length, 2, "an open socket is left alone");
   const current = h.socket();
   feed.stop();
   assert.ok(current.closed);
   assert.equal(h.timers.size, 0);
   assert.equal(FakeSocket.instances.length, 2);
+  feed.reconnectNow();
+  assert.equal(FakeSocket.instances.length, 2, "a stopped feed stays stopped");
+});
+
+test("reconnectNow replaces a possibly dead open socket at once", () => {
+  const h = harness();
+  const feed = live.connect("ws://relay/ws", h.handlers, h.env);
+  const dead = h.socket();
+  dead.serverOpen();
+  feed.reconnectNow();
+  assert.ok(dead.closed);
+  assert.equal(FakeSocket.instances.length, 2);
+  assert.equal(h.timers.size, 0, "the replaced socket's close does not schedule a retry");
+  dead.serverSend({ type: "ev", events: [[1, 1, 1]] });
+  dead.serverOpen();
+  assert.equal(h.seen.messages.length, 0, "late events from the old socket are ignored");
+  assert.deepEqual(h.seen.states, ["connecting", "open", "connecting"]);
+});
+
+test("idleFor measures silence on an open socket only", () => {
+  const h = harness();
+  const feed = live.connect("ws://relay/ws", h.handlers, h.env);
+  assert.equal(feed.idleFor(), 0, "not open yet");
+  h.socket().serverOpen();
+  h.clock.now += 4000;
+  assert.equal(feed.idleFor(), 4000);
+  h.socket().serverSend({ type: "status", cameras: [] });
+  h.clock.now += 1500;
+  assert.equal(feed.idleFor(), 1500);
+  h.socket().serverSend(new Uint8Array([1]));
+  assert.equal(h.seen.messages.length, 1, "binary frames are ignored");
+  h.socket().serverClose();
+  assert.equal(feed.idleFor(), 0, "closed");
+});
+
+test("a waiting retry reports when it will fire", () => {
+  const h = harness();
+  const changes = [];
+  live.connect("ws://relay/ws", { onMessage() {}, onConnection: change => changes.push(change) }, h.env);
+  h.socket().serverClose();
+  assert.deepEqual(changes.at(-1), { state: "waiting", attempt: 1, retryAt: h.clock.now + 500 });
 });
 
 test("connect retries when the socket cannot even be constructed", () => {

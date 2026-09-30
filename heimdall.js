@@ -9,6 +9,14 @@
   const LIVE_ROSTER_MS = 3000;
   const LIVE_TRAIL_LIMIT = 20;
   const LIVE_FIT_MARGIN = 30;
+  // Reconnect when the feed has been silent this long (a dead link never
+  // fires close), or sooner once frames resume after a sleep or a hidden tab.
+  const LIVE_IDLE_MS = 5 * 60 * 1000;
+  const LIVE_WAKE_GAP_MS = 10000;
+  const LIVE_WAKE_IDLE_MS = 30000;
+  // How long an interaction with a <select> holds off roster rebuilds, which
+  // would close an open dropdown.
+  const LIVE_SELECT_BUSY_MS = 8000;
   const CURATED_PLAYERS = ["extradamage", "aloha1234"];
   const canvas = document.getElementById("map");
   const ctx = canvas.getContext("2d", { alpha: false });
@@ -256,6 +264,21 @@
     };
   }
 
+  // observedBase is the base a type-2 create/change/relocate tuple describes.
+  function observedBase(event) {
+    return {
+      actor: event[3],
+      position: event[4],
+      instance: event[5],
+      observed: true,
+      confidence: 100,
+      operation: event[2],
+      updatedAt: event[1],
+      // Live tuples carry the shield end (unix seconds); replays do not.
+      shieldEnd: Number(event[6]) || 0,
+    };
+  }
+
   function applyEvent(event) {
     const type = event[0];
     const time = event[1];
@@ -286,17 +309,7 @@
       const actor = event[3];
       const position = event[4];
       if (operation <= 2 && actor >= 0) {
-        placeBase({
-          actor,
-          position,
-          instance: event[5],
-          observed: true,
-          confidence: 100,
-          operation,
-          updatedAt: time,
-          // Live tuples carry the shield end (unix seconds); replays do not.
-          shieldEnd: Number(event[6]) || 0,
-        });
+        placeBase(observedBase(event));
       } else if (operation === 3) {
         for (const [key, base] of bases) {
           if (base.position === position) bases.delete(key);
@@ -770,6 +783,8 @@
   }
 
   function frame(now) {
+    // Re-arm first: an exception below must not stop the map for good.
+    requestAnimationFrame(frame);
     if (live) {
       tickLive(now);
     } else if (playing && manifest) {
@@ -784,7 +799,6 @@
     }
     previousFrame = now;
     if (redrawNeeded || playing || live) render();
-    requestAnimationFrame(frame);
   }
 
   function setPlaying(value) {
@@ -926,13 +940,17 @@
       cameras: [],
       hasSnapshot: false,
       fitted: false,
+      fitPending: false,
       lastDataAt: 0,
       lastDataT: 0,
       clockOffset: null,
       received: 0,
       readoutAt: 0,
+      tickAt: performance.now(),
       rosterAt: 0,
       rosterDirty: false,
+      selectBusyUntil: 0,
+      feed: null,
       paletteRestored: false,
       pendingSelection: null,
       uidIndex: new Map(),
@@ -946,7 +964,7 @@
     setupPlayerControls();
     resetView();
     renderLiveStatus();
-    const feed = HeimdallLive.connect(HeimdallLive.relayUrl(location.href), {
+    live.feed = HeimdallLive.connect(HeimdallLive.relayUrl(location.href), {
       onMessage: handleLiveMessage,
       onConnection: change => {
         live.connection = change;
@@ -955,7 +973,7 @@
         renderCameraChips();
       },
     });
-    window.addEventListener("online", feed.reconnectNow);
+    window.addEventListener("online", () => live.feed.reconnectNow());
   }
 
   function mountLiveControls() {
@@ -972,6 +990,16 @@
     live.chips.className = "live-cameras";
     live.chips.setAttribute("aria-label", "Camera status");
     ui.timeline.after(live.chips);
+    // A native select keeps focus after a choice, so focus alone can't tell
+    // an open dropdown; a recent pointer or key press on one can.
+    const trackSelect = event => {
+      if (!(event.target instanceof HTMLSelectElement)) return;
+      const settled = event.type === "change" || event.type === "focusout";
+      live.selectBusyUntil = settled ? 0 : Date.now() + LIVE_SELECT_BUSY_MS;
+    };
+    for (const type of ["pointerdown", "keydown", "change", "focusout"]) {
+      document.addEventListener(type, trackSelect, true);
+    }
   }
 
   function handleLiveMessage(message) {
@@ -985,17 +1013,17 @@
     }
     if (message.type === "snap") resetLiveState(message.mapWidth);
     applyLivePlayers(message.players);
-    for (const event of message.events) applyLiveEvent(event);
+    const fromSnapshot = message.type === "snap";
+    for (const event of message.events) applyLiveEvent(event, fromSnapshot);
     live.received += message.events.length;
     live.lastDataAt = Date.now();
     if (message.type === "snap") {
       live.hasSnapshot = true;
       restoreLiveSelection();
       live.rosterAt = 0;
-      if (!live.fitted) {
-        live.fitted = true;
-        fitLiveView();
-      }
+      // Fit on the next frame: a tab opened in the background has no canvas
+      // size yet, and frames only run once it is shown.
+      if (!live.fitted) live.fitPending = true;
     }
     redrawNeeded = true;
     renderLiveStatus();
@@ -1017,6 +1045,8 @@
     playerObservations.clear();
     featuredPlayers.clear();
     selectedPlayer = -1;
+    // The lists must be rebuilt even if the snapshot has no players.
+    live.rosterDirty = true;
   }
 
   function restoreLiveSelection() {
@@ -1027,7 +1057,7 @@
       const index = live.uidIndex.get(uid);
       if (index !== undefined) featuredPlayers.add(index);
     }
-    selectedPlayer = live.uidIndex.get(pending.selected) ?? -1;
+    selectedPlayer = pending.selected ? live.uidIndex.get(pending.selected) ?? -1 : -1;
   }
 
   function applyLivePlayers(rows) {
@@ -1041,10 +1071,13 @@
   }
 
   // applyLiveEvent also keeps a short trail of each player's base positions
-  // for the spotlight breadcrumbs.
-  function applyLiveEvent(event) {
-    applyEvent(event);
-    if (event[0] !== 2 || event[2] !== 0) return;
+  // for the spotlight breadcrumbs. A snapshot is the relay's whole, already
+  // consistent state, so its bases skip placeBase's overlap scan (O(n²)).
+  function applyLiveEvent(event, fromSnapshot) {
+    const baseSeen = event[0] === 2 && event[2] === 0;
+    if (fromSnapshot && baseSeen && event[3] >= 0) bases.set(event[3], observedBase(event));
+    else applyEvent(event);
+    if (!baseSeen) return;
     const trail = playerObservations.get(event[3]) || [];
     if (trail.at(-1)?.position === event[4]) return;
     trail.push({ time: event[1], position: event[4] });
@@ -1058,6 +1091,12 @@
 
   function tickLive(now) {
     currentTime = liveClock();
+    checkLiveFeed(now);
+    if (live.fitPending && canvas.clientWidth > 0 && canvas.clientHeight > 0) {
+      live.fitPending = false;
+      live.fitted = true;
+      fitLiveView();
+    }
     if (now - live.readoutAt >= LIVE_READOUT_MS) {
       live.readoutAt = now;
       updateReadout();
@@ -1065,10 +1104,21 @@
     if (live.rosterDirty && now - live.rosterAt >= LIVE_ROSTER_MS) refreshLiveRoster(now);
   }
 
+  // checkLiveFeed replaces a socket that has gone quiet: always after
+  // LIVE_IDLE_MS, and after LIVE_WAKE_IDLE_MS when frames resume following a
+  // gap (sleep, hidden tab), when a dead link is likely.
+  function checkLiveFeed(now) {
+    const gap = now - live.tickAt;
+    live.tickAt = now;
+    const idle = live.feed?.idleFor() ?? 0;
+    if (idle > LIVE_IDLE_MS || (gap > LIVE_WAKE_GAP_MS && idle > LIVE_WAKE_IDLE_MS)) {
+      live.feed.reconnectNow();
+    }
+  }
+
   function refreshLiveRoster(now) {
-    // Rebuilding a select closes it, so wait while the viewer has one open.
-    if (document.activeElement?.tagName === "SELECT") return;
-    live.rosterDirty = false;
+    // Rebuilding a select closes it, so wait while the viewer is using one.
+    if (Date.now() < live.selectBusyUntil) return;
     live.rosterAt = now;
     populateServers();
     if (!live.paletteRestored && manifest.players.length) {
@@ -1078,6 +1128,7 @@
       updatePaletteControls();
     }
     refreshPlayerList();
+    live.rosterDirty = false;
   }
 
   // fitLiveView frames every known base, or the whole map before any arrive.
@@ -1170,7 +1221,11 @@
     const preferredServers = battle?.servers || [];
     selectFirst(ui.serverFilter, [previous.filter, "all"]);
     selectFirst(ui.sideAServer, [previous.sideA, preferredServers[0], servers[0]?.[0]]);
-    selectFirst(ui.sideBServer, [previous.sideB, preferredServers[1], servers[1]?.[0]]);
+    // Side B skips side A's server, which a roster that started with a single
+    // server would otherwise leave selected on both sides.
+    const sideA = ui.sideAServer.value;
+    selectFirst(ui.sideBServer, [previous.sideB, preferredServers[1], ...servers.map(([server]) => server)]
+      .filter(value => value !== undefined && String(value) !== sideA));
     const abbrCounts = new Map();
     for (const value of alliances.values()) abbrCounts.set(value.abbr, (abbrCounts.get(value.abbr) || 0) + 1);
     const allianceGroups = new Map();

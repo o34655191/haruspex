@@ -15,10 +15,19 @@
   // (refused, or dropped right after the snapshot) keep backing off, so a
   // struggling relay is not hammered with snapshot requests.
   const STABLE_MS = 30000;
-  const MAX_PLAYER_INDEX = 500000;
+  // Player indices are dense from 0; the cap keeps one corrupt row from
+  // growing the page's player arrays to a huge sparse length.
+  const MAX_PLAYER_INDEX = 100000;
+  // Packed positions (x + mapWidth·y) stay far below this on any real map;
+  // the cap keeps a corrupt value from wrecking the view.
+  const MAX_POSITION = 10000000;
   const DEV_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
   const MIN_EVENT_LENGTH = new Map([[0, 12], [1, 3], [2, 5]]);
+  const POSITION_SLOTS = new Map([[0, [5, 6]], [1, []], [2, [4]]]);
   const CAMERA_STATES = new Set(["connecting", "live", "stale", "down"]);
+
+  const scalar = value => typeof value === "string" || typeof value === "number" ? String(value) : "";
+  const validPosition = value => Number.isInteger(value) && value >= 0 && value < MAX_POSITION;
 
   // relayUrl picks the feed address. ?relay= is honoured only when the page
   // itself runs on a local dev host, so a shared link cannot point viewers
@@ -48,18 +57,20 @@
       .filter(row => Array.isArray(row) && Number.isInteger(row[0]) && row[0] >= 0 && row[0] < MAX_PLAYER_INDEX)
       .map(row => ({
         index: row[0],
-        uid: String(row[1] ?? ""),
-        name: String(row[2] ?? ""),
-        abbr: String(row[3] ?? ""),
+        uid: scalar(row[1]),
+        name: scalar(row[2]),
+        abbr: scalar(row[3]),
         server: Number.isFinite(row[4]) ? row[4] : 0,
-      }));
+      }))
+      .filter(row => row.uid !== "");
   }
 
   function validEvents(events) {
     if (!Array.isArray(events)) return [];
     return events.filter(event => Array.isArray(event)
       && event.length >= (MIN_EVENT_LENGTH.get(event[0]) ?? Infinity)
-      && event.every(Number.isFinite));
+      && event.every(Number.isFinite)
+      && POSITION_SLOTS.get(event[0]).every(slot => validPosition(event[slot])));
   }
 
   function validCameras(cameras) {
@@ -156,7 +167,8 @@
   // connect keeps one socket open to url, reconnecting with backoff, and
   // reports each checked message and every connection change:
   //   onConnection({ state: "connecting" | "open" | "waiting", attempt, retryAt })
-  // The environment hooks exist for tests; browsers use the defaults.
+  // It returns { reconnectNow, idleFor, stop }. The environment hooks exist
+  // for tests; browsers use the defaults.
   function connect(url, handlers, env = {}) {
     const {
       WebSocketImpl = root.WebSocket,
@@ -169,6 +181,7 @@
     let attempt = 0;
     let timer = null;
     let openedAt = 0;
+    let lastMessageAt = 0;
     let stopped = false;
 
     const report = (state, retryAt = 0) => handlers.onConnection?.({ state, attempt, retryAt });
@@ -185,30 +198,40 @@
         return;
       }
       socket = ws;
+      // A replaced socket can still deliver events (browser close() is
+      // asynchronous); only the current one may touch the feed.
       ws.onopen = () => {
+        if (socket !== ws) return;
         openedAt = now();
         report("open");
       };
       ws.onmessage = event => {
-        if (typeof event.data !== "string") return;
-        const message = parseMessage(event.data);
-        if (!message) {
-          console.warn("Heimdall live: ignored a malformed relay message");
-          return;
-        }
+        if (socket !== ws || typeof event.data !== "string") return;
+        lastMessageAt = now();
         try {
-          handlers.onMessage(message);
+          const message = parseMessage(event.data);
+          if (message) handlers.onMessage(message);
+          else console.warn("Heimdall live: ignored a malformed relay message");
         } catch (error) {
           console.error("Heimdall live: failed to apply a relay message", error);
         }
       };
       ws.onclose = () => {
         if (socket !== ws) return;
-        socket = null;
-        if (openedAt && now() - openedAt >= STABLE_MS) attempt = 0;
-        openedAt = 0;
+        detach();
         if (!stopped) scheduleRetry();
       };
+    }
+
+    // detach forgets the current socket, resetting the backoff if it had
+    // been up long enough, and returns it so the caller can close it.
+    function detach() {
+      const ws = socket;
+      socket = null;
+      if (openedAt && now() - openedAt >= STABLE_MS) attempt = 0;
+      openedAt = 0;
+      lastMessageAt = 0;
+      return ws;
     }
 
     function scheduleRetry() {
@@ -218,26 +241,32 @@
       timer = schedule(open, wait);
     }
 
-    // reconnectNow skips the remaining backoff, e.g. when the network returns.
+    // reconnectNow drops the current socket (it may be silently dead after a
+    // sleep or a network change) or skips the remaining backoff, and opens a
+    // fresh connection at once.
     function reconnectNow() {
-      if (stopped || socket || timer === null) return;
-      cancel(timer);
+      if (stopped) return;
+      if (timer !== null) cancel(timer);
+      detach()?.close();
       open();
+    }
+
+    // idleFor is how long an open socket has gone without a message; 0 while
+    // not connected. The relay sends batches only on change, so a long
+    // silence while "open" usually means the link is dead.
+    function idleFor() {
+      return socket && openedAt ? now() - Math.max(openedAt, lastMessageAt) : 0;
     }
 
     function stop() {
       stopped = true;
       if (timer !== null) cancel(timer);
       timer = null;
-      if (socket) {
-        const ws = socket;
-        socket = null;
-        ws.close();
-      }
+      detach()?.close();
     }
 
     open();
-    return { reconnectNow, stop };
+    return { reconnectNow, idleFor, stop };
   }
 
   const api = { DEFAULT_RELAY, STABLE_MS, relayUrl, retryDelay, parseMessage, syncClock, ago, describeStatus, connect };
