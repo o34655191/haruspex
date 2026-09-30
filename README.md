@@ -75,6 +75,15 @@ the replay uses. The battle selector links to it from the "Watch now" card.
 - The relay must list the site's origin: run lwlive with
   `-origins o34655191.github.io`.
 
+Season structures (cities, strongholds, trade posts, outposts) come from
+`data/heimdall/layouts/<server>.json`, loaded for the server the relay's camera
+watches. Each row is `[kind, name, level, x, y, buff]` at the structure's centre
+tile in local coordinates, the same numbers in-game share links show; the
+`footprints` block sets each kind's core and grey (contaminated) square in
+tiles. `472.json` is Season 6, taken from Cpt Hedgehog's interactive map
+(cpt-hedge.com), where warzone 472 is the block at big-map origin (0, 1000). It
+matches every share link checked, and live bases never overlap a core.
+
 To test locally, serve this folder and point the page at a local relay.
 `?relay=` is honoured only when the page itself runs on localhost:
 

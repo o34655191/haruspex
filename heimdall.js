@@ -23,6 +23,15 @@
   // of the warzone's width.
   const VIEW_MARGIN = .12;
   const CAMERA_STATE_COLORS = { live: "#8de0b5", connecting: "#ffd166", stale: "#ffd166", down: "#ff5d5d" };
+  // Season structures (data/heimdall/layouts/<server>.json) by kind; the
+  // capitol has its own overlay, so it is only a click target here.
+  const STRUCTURE_STYLES = {
+    city: { color: "#f0b35a", key: "City" },
+    stronghold: { color: "#46d6b0", key: "Stronghold" },
+    tradepost: { color: "#b99cff", key: "Trade post" },
+    outpost: { color: "#ff8fa3", key: "Outpost" },
+    capitol: { color: "#ffd166", key: "Capitol" },
+  };
   const canvas = document.getElementById("map");
   const ctx = canvas.getContext("2d", { alpha: false });
   const ui = Object.fromEntries([
@@ -624,6 +633,51 @@
     ctx.restore();
   }
 
+  // drawStructures draws each season structure as its grey (contaminated)
+  // square with the building's core inside, whether or not a camera sees it.
+  function drawStructures(width, height) {
+    const layout = live?.layout;
+    if (!layout || !live.showStructures?.checked) return;
+    ctx.save();
+    ctx.font = "9px ui-monospace, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "bottom";
+    for (const structure of layout.structures) {
+      const { core, zone } = layout.footprints[structure.kind];
+      const point = toScreen(structure.x, structure.y, width, height);
+      const zoneHalf = zone * camera.zoom / 2;
+      const coreHalf = core * camera.zoom / 2;
+      renderHits.push({ kind: "structure", x: point.x, y: point.y, reach: coreHalf, data: structure });
+      if (!zone || !inView(point, width, height, zoneHalf + 20)) continue;
+      const color = STRUCTURE_STYLES[structure.kind].color;
+      ctx.fillStyle = "rgba(150,160,172,.13)";
+      ctx.strokeStyle = "rgba(170,180,192,.32)";
+      ctx.lineWidth = 1;
+      ctx.fillRect(point.x - zoneHalf, point.y - zoneHalf, zoneHalf * 2, zoneHalf * 2);
+      ctx.strokeRect(point.x - zoneHalf, point.y - zoneHalf, zoneHalf * 2, zoneHalf * 2);
+      if (core) {
+        ctx.fillStyle = hexColor(color, .22);
+        ctx.strokeStyle = hexColor(color, .9);
+        ctx.lineWidth = 1.2;
+        ctx.fillRect(point.x - coreHalf, point.y - coreHalf, coreHalf * 2, coreHalf * 2);
+        ctx.strokeRect(point.x - coreHalf, point.y - coreHalf, coreHalf * 2, coreHalf * 2);
+      }
+      if (camera.zoom >= 1.6) {
+        ctx.fillStyle = hexColor(color, .95);
+        ctx.fillText(structureLabel(structure), point.x, point.y - zoneHalf - 2);
+      }
+    }
+    ctx.restore();
+  }
+
+  // structureLabel is a short tag like the season maps use (WV1, FG4, TP2)
+  // until the map is zoomed in far enough for the full name.
+  function structureLabel(structure) {
+    if (camera.zoom >= 5) return `${structure.name} · Lv${structure.level}`;
+    const initials = structure.name.split(/\s+/).map(word => word[0] || "").join("").toUpperCase();
+    return `${initials}${structure.level}`;
+  }
+
   function mapPath(points, width, height) {
     ctx.beginPath();
     points.forEach(([x, y], index) => {
@@ -833,7 +887,9 @@
       redrawNeeded = false;
       return;
     }
+    renderHits = [];
     drawCameraAreas(width, height);
+    drawStructures(width, height);
     drawCapitol(width, height);
     // Discrete breadcrumbs, never a fabricated path between teleports.
     const trail = (playerObservations.get(selectedPlayer) || []).filter(p => p.time <= currentTime && p.time >= currentTime - 300000 && !integrityGapAt(manifest.start + p.time));
@@ -846,7 +902,6 @@
       ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.stroke();
     }
     ctx.restore();
-    renderHits = [];
     const server = selectedServer();
     if (ui.showBases.checked) for (const base of bases.values()) drawBase(base, width, height, server);
     for (const march of activeMarches.values()) drawMarch(march, width, height, server);
@@ -912,6 +967,17 @@
       ];
       const speed = formatMarchSpeed(march.speed);
       if (speed) rows.splice(3, 0, ["Speed", speed]);
+      detailRows(rows);
+    } else if (hit.kind === "structure") {
+      const structure = hit.data;
+      const { core, zone } = live.layout.footprints[structure.kind];
+      ui.inspectorKind.textContent = STRUCTURE_STYLES[structure.kind].key;
+      ui.inspectorTitle.textContent = structure.name;
+      const rows = [["Level", String(structure.level)], ["Coordinates", `${structure.x}, ${structure.y}`]];
+      if (core) rows.push(["Footprint", `${core} × ${core} tiles`]);
+      if (zone > core) rows.push(["Grey area", `${zone} × ${zone} tiles`]);
+      if (structure.buff) rows.push(["Buff", structure.buff]);
+      rows.push(["Holder", "Not tracked (static season map)"]);
       detailRows(rows);
     } else {
       const base = hit.data;
@@ -1022,6 +1088,9 @@
       rosterDirty: false,
       selectBusyUntil: 0,
       feed: null,
+      layout: null,
+      layoutServer: 0,
+      showStructures: null,
       paletteRestored: false,
       pendingSelection: null,
       uidIndex: new Map(),
@@ -1064,6 +1133,13 @@
     ui.sideAColor.setAttribute("aria-label", "Home server color");
     ui.sideBColor.setAttribute("aria-label", "Foreign servers color");
     ui.sideBServer.hidden = true;
+    const structuresToggle = document.createElement("label");
+    live.showStructures = document.createElement("input");
+    live.showStructures.type = "checkbox";
+    live.showStructures.checked = true;
+    live.showStructures.addEventListener("change", () => { redrawNeeded = true; });
+    structuresToggle.append(live.showStructures, " Structures");
+    ui.showCapitol.closest("label").after(structuresToggle);
     const foreign = document.createElement("span");
     foreign.className = "foreign-label";
     foreign.textContent = "Foreign";
@@ -1098,6 +1174,7 @@
         battle.servers = [home];
         live.rosterDirty = true;
       }
+      if (home) loadLayout(home);
       renderCameraChips();
       renderLiveStatus();
       return;
@@ -1138,6 +1215,38 @@
     selectedPlayer = -1;
     // The lists must be rebuilt even if the snapshot has no players.
     live.rosterDirty = true;
+  }
+
+  // loadLayout fetches the season structures for the watched server once; a
+  // server without a layout file simply shows none.
+  async function loadLayout(server) {
+    if (live.layoutServer === server) return;
+    live.layoutServer = server;
+    live.layout = null;
+    try {
+      const response = await fetch(`data/heimdall/layouts/${server}.json`, { cache: "no-cache" });
+      if (!response.ok || live.layoutServer !== server) return;
+      live.layout = HeimdallLive.parseLayout(await response.json());
+      if (live.layout) addStructureKeys(live.layout);
+    } catch (error) {
+      console.warn(`Heimdall live: no structure layout for server ${server}`, error);
+    }
+    redrawNeeded = true;
+  }
+
+  function addStructureKeys(layout) {
+    const mapKey = document.querySelector(".map-key");
+    if (!mapKey || mapKey.querySelector(".key-structure")) return;
+    const kinds = new Set(layout.structures.map(structure => structure.kind));
+    for (const [kind, style] of Object.entries(STRUCTURE_STYLES)) {
+      if (kind === "capitol" || !kinds.has(kind)) continue;
+      const entry = document.createElement("span");
+      const swatch = document.createElement("i");
+      swatch.className = "key-structure";
+      swatch.style.borderColor = style.color;
+      entry.append(swatch, style.key);
+      mapKey.append(entry);
+    }
   }
 
   function restoreLiveSelection() {
@@ -1486,10 +1595,13 @@
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
       let best = null;
-      let distance = 13;
+      let bestScore = Infinity;
       for (const hit of renderHits) {
         const d = Math.hypot(hit.x - x, hit.y - y);
-        if (d < distance) { best = hit; distance = d; }
+        if (d >= Math.max(13, hit.reach || 0)) continue;
+        // A base or march wins over the structure it stands next to.
+        const score = hit.kind === "structure" ? d + 1000 : d;
+        if (score < bestScore) { best = hit; bestScore = score; }
       }
       if (best) inspect(best);
       else ui.inspector.hidden = true;

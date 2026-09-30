@@ -124,6 +124,7 @@
 .integrity-notice.is-warn>strong{border-color:rgba(255,209,102,.5);color:var(--gold);background:rgba(105,80,20,.22)}
 .key-shield{border:1px solid #7ce1ff;border-radius:50%}
 .key-camera{border:1px dashed #8de0b5}
+.key-structure{border:1px solid;background:rgba(150,160,172,.25)}
 .foreign-label{font:11px var(--mono);color:var(--ink-dim)}
 @media(max-width:700px){.load-state.live-state{justify-content:flex-start}.live-cameras{justify-content:flex-start}}
 @media(prefers-reduced-motion:reduce){.load-state.is-live::before{animation:none}}

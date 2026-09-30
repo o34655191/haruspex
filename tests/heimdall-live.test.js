@@ -143,6 +143,43 @@ test("parseMessage rejects a top-level array and ignores a bad clock", () => {
   assert.equal(live.parseMessage(JSON.stringify({ type: "ev", t: -5 })).t, 0);
 });
 
+test("parseLayout keeps valid structures and fills footprint gaps", () => {
+  const layout = live.parseLayout({
+    footprints: { city: { core: 7, zone: 15 }, tradepost: { core: 5 }, outpost: { core: 9, zone: 3 }, stronghold: { core: -1, zone: 15 } },
+    structures: [
+      ["city", "Wetland Village", 1, 49, 849, "food +7.5%"],
+      ["tradepost", "Trade Post", 2, 249, 949, ""],
+      ["capitol", "", 7, 499, 499],
+      ["bank", "Bank", 1, 10, 10, ""],
+      ["city", "Nowhere", 1, -5, 10, ""],
+      ["city", "Nowhere", 1, 10.5, 10, ""],
+      ["city", { name: "x" }, "3", 10, 10, 7],
+      "junk",
+    ],
+  });
+  assert.deepEqual(layout.structures, [
+    { kind: "city", name: "Wetland Village", level: 1, x: 49, y: 849, buff: "food +7.5%" },
+    { kind: "tradepost", name: "Trade Post", level: 2, x: 249, y: 949, buff: "" },
+    { kind: "capitol", name: "capitol", level: 7, x: 499, y: 499, buff: "" },
+    { kind: "city", name: "city", level: 0, x: 10, y: 10, buff: "7" },
+  ]);
+  assert.deepEqual(layout.footprints.city, { core: 7, zone: 15 });
+  assert.deepEqual(layout.footprints.tradepost, { core: 5, zone: 5 }, "a missing zone is the core");
+  assert.deepEqual(layout.footprints.outpost, { core: 9, zone: 9 }, "a zone smaller than the core is ignored");
+  assert.deepEqual(layout.footprints.stronghold, { core: 0, zone: 15 }, "a bad core falls back to 0");
+  assert.deepEqual(layout.footprints.capitol, { core: 0, zone: 0 }, "unlisted kinds draw nothing");
+  assert.equal(live.parseLayout(null), null);
+  assert.equal(live.parseLayout({ structures: "none" }), null);
+});
+
+test("the shipped 472 layout parses completely", () => {
+  const raw = JSON.parse(require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "data", "heimdall", "layouts", "472.json"), "utf8"));
+  const layout = live.parseLayout(raw);
+  assert.equal(layout.structures.length, raw.structures.length);
+  assert.ok(layout.structures.some(s => s.name === "Wetland Village" && s.x === 49 && s.y === 849), "a share-link village");
+  assert.ok(layout.structures.some(s => s.kind === "capitol" && s.x === 499 && s.y === 499));
+});
+
 test("parseMessage defaults a missing clock and map width to zero", () => {
   const message = live.parseMessage(JSON.stringify({ type: "status", cameras: [] }));
   assert.equal(message.t, 0);

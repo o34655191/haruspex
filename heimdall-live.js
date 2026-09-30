@@ -96,6 +96,35 @@
       }));
   }
 
+  const STRUCTURE_KINDS = ["city", "stronghold", "tradepost", "outpost", "capitol"];
+  const MAX_FOOTPRINT = 200;
+
+  function validFootprint(raw) {
+    const core = Number.isInteger(raw?.core) && raw.core >= 0 && raw.core <= MAX_FOOTPRINT ? raw.core : 0;
+    const zone = Number.isInteger(raw?.zone) && raw.zone >= core && raw.zone <= MAX_FOOTPRINT ? raw.zone : core;
+    return { core, zone };
+  }
+
+  // parseLayout checks a season layout file (data/heimdall/layouts/<server>.json):
+  // per-kind footprints, the core and the grey zone around it in tiles, and
+  // structures as [kind, name, level, x, y, buff] at their centre tile.
+  function parseLayout(raw) {
+    if (!raw || typeof raw !== "object" || !Array.isArray(raw.structures)) return null;
+    const footprints = Object.fromEntries(STRUCTURE_KINDS.map(kind => [kind, validFootprint(raw.footprints?.[kind])]));
+    const inMap = value => Number.isInteger(value) && value >= 0 && value <= MAX_AREA_COORD;
+    const structures = raw.structures
+      .filter(row => Array.isArray(row) && STRUCTURE_KINDS.includes(row[0]) && inMap(row[3]) && inMap(row[4]))
+      .map(([kind, name, level, x, y, buff]) => ({
+        kind,
+        name: scalar(name) || kind,
+        level: Number.isInteger(level) && level >= 0 ? level : 0,
+        x,
+        y,
+        buff: scalar(buff),
+      }));
+    return { footprints, structures };
+  }
+
   // parseMessage turns one relay frame into a checked message, or null.
   function parseMessage(text) {
     let raw;
@@ -281,7 +310,7 @@
     return { reconnectNow, idleFor, stop };
   }
 
-  const api = { DEFAULT_RELAY, STABLE_MS, relayUrl, retryDelay, parseMessage, syncClock, ago, describeStatus, connect };
+  const api = { DEFAULT_RELAY, STABLE_MS, relayUrl, retryDelay, parseMessage, parseLayout, syncClock, ago, describeStatus, connect };
   root.HeimdallLive = api;
   if (typeof module === "object" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);
