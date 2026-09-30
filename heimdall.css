@@ -97,6 +97,34 @@
 }
 
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}.program,.capture-track i{transition:none}}
+
+/* Scripts hide controls with [hidden]; flex/grid display rules must not win. */
+.replay-page [hidden]{display:none!important}
+
+/* Live mode (heimdall.html?live): no timeline, a status dot, camera chips. */
+.is-live .play,.is-live .timeline,.is-live .speed,.is-live .timeline-label,.is-live .speed-label{display:none}
+.is-live .transport-main{grid-template-columns:auto 1fr}
+.is-live .transport-meta{margin-left:0}
+.load-state.live-state{display:inline-flex;align-items:center;justify-content:flex-end;gap:7px}
+.load-state.live-state::before{content:"";flex:none;width:8px;height:8px;border-radius:50%;background:currentColor}
+.load-state.is-live{color:#8de0b5}
+.load-state.is-live::before{animation:live-pulse 2s infinite}
+.load-state.is-stale,.load-state.is-connecting{color:var(--gold)}
+.load-state.is-down,.load-state.is-offline{color:var(--enemy)}
+@keyframes live-pulse{0%{box-shadow:0 0 0 0 rgba(141,224,181,.55)}70%{box-shadow:0 0 0 7px rgba(141,224,181,0)}100%{box-shadow:0 0 0 0 rgba(141,224,181,0)}}
+.live-cameras{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px}
+.live-cameras.is-frozen{opacity:.5}
+.camera-chip{--chip:#8de0b5;display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border:1px solid color-mix(in srgb,var(--chip) 45%,transparent);border-radius:999px;font:600 11px var(--mono);color:var(--ink)}
+.camera-chip i{width:7px;height:7px;border-radius:50%;background:var(--chip);box-shadow:0 0 8px var(--chip)}
+.camera-chip b{font-weight:500;font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--chip)}
+.camera-chip.is-stale,.camera-chip.is-connecting{--chip:var(--gold)}
+.camera-chip.is-down{--chip:var(--enemy)}
+.integrity-notice.is-warn{border-color:rgba(255,209,102,.5);background:linear-gradient(110deg,rgba(105,80,20,.26),rgba(20,26,35,.96) 62%)}
+.integrity-notice.is-warn .integrity-mark{border-color:rgba(255,209,102,.75);color:var(--gold)}
+.integrity-notice.is-warn>strong{border-color:rgba(255,209,102,.5);color:var(--gold);background:rgba(105,80,20,.22)}
+.key-shield{border:1px solid #7ce1ff;border-radius:50%}
+@media(max-width:700px){.load-state.live-state{justify-content:flex-start}.live-cameras{justify-content:flex-start}}
+@media(prefers-reduced-motion:reduce){.load-state.is-live::before{animation:none}}
 /* Player controls stay usable on narrow screens without covering the map. */
 .player-panel { flex-wrap: wrap; gap: 10px; }
 .player-panel input[type="search"] { min-width: 180px; padding: 8px; background: #101923; color: #edf4fc; border: 1px solid #536478; border-radius: 5px; }

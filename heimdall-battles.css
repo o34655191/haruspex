@@ -30,6 +30,12 @@
 .battle-open{font:10px var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--gold);white-space:nowrap}
 .battle-loading{padding:34px;text-align:center;border:1px dashed var(--line);border-radius:14px;color:var(--ink-faint);font:12px var(--mono)}
 .battle-loading.error{color:var(--enemy)}
+.watch-live{margin-bottom:34px}
+.live-card{min-height:0;border-color:rgba(141,224,181,.35);background:linear-gradient(115deg,rgba(141,224,181,.06),transparent 42%),var(--panel)}
+.live-card:hover,.live-card:focus-visible{border-color:rgba(141,224,181,.75);background:linear-gradient(115deg,rgba(141,224,181,.1),transparent 44%),var(--panel-2)}
+.live-index{display:inline-flex;align-items:center;gap:7px;color:#8de0b5}
+.live-index i{width:8px;height:8px;border-radius:50%;background:#8de0b5;box-shadow:0 0 10px #8de0b5}
+.live-card .battle-open{color:#8de0b5}
 .watch-foot{padding-top:28px;text-align:center;color:#7f93a6;font:10px var(--mono);letter-spacing:.2em;text-transform:uppercase}
 @media(max-width:680px){
   .watch-shell{width:min(100% - 24px,980px);padding-top:18px}.watch-nav{align-items:flex-start;gap:20px}.watch-nav span{text-align:right}

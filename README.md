@@ -11,6 +11,7 @@ scryer.html             Project Haruspex archive
 heimdall-battles.html   Project Heimdall battle selector
 heimdall.html           Project Heimdall world-map replay
 heimdall.js      Canvas renderer, timeline, map interaction and filters
+heimdall-live.js Live relay feed: WebSocket, reconnect backoff, camera status
 heimdall.css     Replay-specific responsive styles
 heimdall-battles.css    Battle-selector styles
 styles.css       Shared shell styles
@@ -55,6 +56,38 @@ server rather than opening the HTML as a `file://` URL:
 
 ```powershell
 python -m http.server 8000
+```
+
+## Live mode
+
+`heimdall.html?live` draws the map from the lwlive relay
+(`lastwar-client` `cmd/lwlive`) instead of a recorded battle. The page opens
+`wss://heimdall.tailc3e099.ts.net/ws`, takes the full snapshot the relay sends
+on connect, then applies its batched `ev` changes with the same `applyEvent`
+the replay uses. The battle selector links to it from the "Watch now" card.
+
+- Reconnects with jittered exponential backoff (1 s doubling to 30 s); the
+  backoff resets only after a connection stayed up for 30 s. Each reconnect
+  starts from a fresh snapshot.
+- The header dot, the banner above the map and the camera chips show whether
+  the relay connection is up and whether each camera is live, stale,
+  connecting or down.
+- The relay must list the site's origin: run lwlive with
+  `-origins o34655191.github.io`.
+
+To test locally, serve this folder and point the page at a local relay.
+`?relay=` is honoured only when the page itself runs on localhost:
+
+```powershell
+lwlive.exe -replay replay.ndjson -speed 20 -listen 127.0.0.1:8082 -origins "localhost:*,127.0.0.1:*"
+python -m http.server 8000
+# open http://localhost:8000/heimdall.html?live&relay=ws://127.0.0.1:8082/ws
+```
+
+Unit tests for the feed (Node 22+):
+
+```powershell
+node --test "tests/*.test.js"
 ```
 
 ## Add a report

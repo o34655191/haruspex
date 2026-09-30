@@ -2,6 +2,14 @@
   "use strict";
 
   const CATALOG_URL = "data/heimdall/battles.json";
+  // heimdall.html?live streams the lwlive relay (heimdall-live.js) instead of
+  // loading a recorded battle.
+  const LIVE_REQUESTED = new URLSearchParams(location.search).has("live");
+  const LIVE_READOUT_MS = 250;
+  const LIVE_ROSTER_MS = 3000;
+  const LIVE_TRAIL_LIMIT = 20;
+  const LIVE_FIT_MARGIN = 30;
+  const CURATED_PLAYERS = ["extradamage", "aloha1234"];
   const canvas = document.getElementById("map");
   const ctx = canvas.getContext("2d", { alpha: false });
   const ui = Object.fromEntries([
@@ -41,6 +49,10 @@
   const playerActions = new Map();
   const playerObservations = new Map();
   let focusUI;
+  let refreshPlayerList = () => {};
+  let live = null;
+
+  const isCurated = name => CURATED_PLAYERS.includes(String(name).trim().toLowerCase());
 
   function setupPlayerControls() {
     const panel = document.createElement("section");
@@ -60,9 +72,15 @@
       });
       focusUI.playerSelect.value = String(selectedPlayer);
     };
+    refreshPlayerList = populate;
     manifest.players.forEach((p, index) => {
-      if (["extradamage", "aloha1234"].includes(p[1].trim().toLowerCase())) featuredPlayers.add(index);
+      if (isCurated(p[1])) featuredPlayers.add(index);
     });
+    if (live) {
+      // Live mode has no history to jump through.
+      focusUI.firstAction.hidden = true;
+      focusUI.nextAction.hidden = true;
+    }
     for (const event of events) {
       const index = event[0] === 0 ? event[3] : event[0] === 2 && event[2] <= 2 ? baseMeta(event[3])[4] : -1;
       if (index >= 0) {
@@ -111,7 +129,7 @@
     ctx.beginPath(); ctx.arc(point.x, point.y, 13, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
     const player = playerFor(index);
-    const queen = ["extradamage", "aloha1234"].includes(player[1].trim().toLowerCase());
+    const queen = isCurated(player[1]);
     ctx.font = "bold 19px Georgia, serif";
     ctx.fillStyle = campColor(server);
     if (featured) ctx.fillText(queen ? "♛" : "★", point.x - 8, point.y - 17);
@@ -225,6 +243,10 @@
     bases.set(base.actor, base);
   }
 
+  function shieldActive(base) {
+    return base.shieldEnd > 0 && base.shieldEnd * 1000 > manifest.start + currentTime;
+  }
+
   function marchPosition(march, time) {
     const duration = Math.max(1, march.end - march.start);
     const progress = clamp((time - march.start) / duration, 0, 1);
@@ -272,6 +294,8 @@
           confidence: 100,
           operation,
           updatedAt: time,
+          // Live tuples carry the shield end (unix seconds); replays do not.
+          shieldEnd: Number(event[6]) || 0,
         });
       } else if (operation === 3) {
         for (const [key, base] of bases) {
@@ -384,14 +408,21 @@
     redrawNeeded = true;
   }
 
+  function formatClock(time) {
+    return new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  }
+
   function updateReadout() {
-    const absolute = new Date(manifest.start + currentTime);
-    ui.clock.textContent = absolute.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const seconds = Math.floor(currentTime / 1000);
-    const hours = Math.floor(seconds / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    ui.elapsed.textContent = `+${hours ? `${String(hours).padStart(2, "0")}:` : ""}${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    ui.clock.textContent = formatClock(manifest.start + currentTime);
+    if (live) {
+      ui.elapsed.textContent = live.lastDataAt ? `last change ${HeimdallLive.ago(Date.now() - live.lastDataAt)}` : "waiting for data";
+    } else {
+      const seconds = Math.floor(currentTime / 1000);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const secs = seconds % 60;
+      ui.elapsed.textContent = `+${hours ? `${String(hours).padStart(2, "0")}:` : ""}${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+    }
     ui.activeMarches.textContent = activeMarches.size.toLocaleString();
     let observed = 0;
     let inferred = 0;
@@ -402,12 +433,16 @@
     ui.visibleBases.textContent = (observed + inferred).toLocaleString();
     ui.confirmedBases.textContent = observed.toLocaleString();
     ui.inferredBases.textContent = inferred.toLocaleString();
-    ui.eventCount.textContent = eventIndex.toLocaleString();
+    ui.eventCount.textContent = (live ? live.received : eventIndex).toLocaleString();
     updateIntegrityReadout();
     updateCaptureReadout();
   }
 
   function updateIntegrityReadout() {
+    if (live) {
+      renderLiveStatus();
+      return;
+    }
     const integrity = battle?.integrity;
     if (!integrity) {
       ui.integrityNotice.hidden = true;
@@ -448,6 +483,10 @@
   }
 
   function resetView() {
+    if (live) {
+      fitLiveView();
+      return;
+    }
     const { width, height } = screenSize();
     const capitolViewSpan = battle?.layout === "none" ? 1060 : 180;
     camera = {
@@ -615,6 +654,11 @@
     ctx.fillRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.strokeRect(point.x - size / 2, point.y - size / 2, size, size);
     ctx.setLineDash([]);
+    if (shieldActive(base)) {
+      ctx.strokeStyle = "rgba(124,225,255,.9)";
+      ctx.lineWidth = 1.25;
+      ctx.beginPath(); ctx.arc(point.x, point.y, size * .75 + 3, 0, Math.PI * 2); ctx.stroke();
+    }
     if (ui.showLabels.checked && meta[1] && camera.zoom > 1.4) {
       ctx.fillStyle = "rgba(232,238,245,.72)";
       ctx.font = "9px ui-monospace, monospace";
@@ -673,11 +717,11 @@
   }
 
   function render() {
-    if (focusUI && selectedPlayer < 0) focusUI.playerStatus.textContent = "Select a player to spotlight their base and marches. Queens and stars are curated, not rankings.";
+    if (focusUI && selectedPlayer < 0) setText(focusUI.playerStatus, "Select a player to spotlight their base and marches. Queens and stars are curated, not rankings.");
     if (focusUI && selectedPlayer >= 0) {
       const gapNow = integrityGapAt(manifest.start + currentTime);
       const base = [...bases.values()].find(b => b.observed && baseMeta(b.actor)[4] === selectedPlayer);
-      focusUI.playerStatus.textContent = gapNow ? "Coverage gap: position unavailable." : base ? "Last observed base position; marches are interpolated. Featured markers are curated, not rankings." : "Base not currently observed; recorded marches may still be visible.";
+      setText(focusUI.playerStatus, gapNow ? "Coverage gap: position unavailable." : base ? "Last observed base position; marches are interpolated. Featured markers are curated, not rankings." : "Base not currently observed; recorded marches may still be visible.");
       if (!gapNow && base && focusUI.followPlayer.checked) Object.assign(camera, unpack(base.position));
     }
     resizeCanvas();
@@ -726,7 +770,9 @@
   }
 
   function frame(now) {
-    if (playing && manifest) {
+    if (live) {
+      tickLive(now);
+    } else if (playing && manifest) {
       const delta = previousFrame ? now - previousFrame : 0;
       const next = currentTime + delta * Number(ui.speed.value);
       if (next >= manifest.duration) {
@@ -737,7 +783,7 @@
       }
     }
     previousFrame = now;
-    if (redrawNeeded || playing) render();
+    if (redrawNeeded || playing || live) render();
     requestAnimationFrame(frame);
   }
 
@@ -789,14 +835,19 @@
       const world = unpack(base.position);
       ui.inspectorKind.textContent = base.observed ? "Observed player base" : "Inferred player base";
       ui.inspectorTitle.textContent = meta[0] || player?.[1] || "Unknown player";
-      detailRows([
+      const rows = [
         ["Alliance", meta[1]],
         ["Server", String(meta[2] || "")],
         ["Coordinates", `${world.x}, ${world.y}`],
         ["Footprint", "3 × 3 tiles"],
-        ["Evidence", base.observed ? baseOperationName(base.operation) : "March + later point confirmation"],
+        ["Evidence", live ? "Live map" : base.observed ? baseOperationName(base.operation) : "March + later point confirmation"],
         ["Confidence", `${base.confidence}%`],
-      ]);
+      ];
+      if (shieldActive(base)) {
+        const until = new Date(base.shieldEnd * 1000);
+        rows.push(["Shield until", until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })]);
+      }
+      detailRows(rows);
     }
     ui.inspector.hidden = false;
   }
@@ -840,6 +891,7 @@
       }
       events.sort((a, b) => a[1] - b[1]);
       populateServers();
+      restorePalette();
       setupPlayerControls();
       ui.loadState.textContent = `${events.length.toLocaleString()} events · ${formatDuration(manifest.duration)}`;
       ui.loadState.className = "load-state ready";
@@ -855,6 +907,233 @@
         : `Replay unavailable: ${error.message}`;
       ui.loadState.className = "load-state error";
     }
+  }
+
+  // Live mode: the relay's snapshot and batches feed the same state the
+  // replay builds. Players are keyed by the relay's index, so a base actor
+  // is its owner's player index and baseActors mirrors players.
+  function startLive() {
+    if (!window.HeimdallLive) {
+      ui.loadState.textContent = "Live mode is unavailable on this page";
+      ui.loadState.className = "load-state error";
+      return;
+    }
+    battleId = "live";
+    battle = { id: "live", title: "Live world map" };
+    manifest = { mapWidth: 1000, start: 0, duration: 0, players: [], baseActors: [] };
+    live = {
+      connection: { state: "connecting", attempt: 0, retryAt: 0 },
+      cameras: [],
+      hasSnapshot: false,
+      fitted: false,
+      lastDataAt: 0,
+      lastDataT: 0,
+      clockOffset: null,
+      received: 0,
+      readoutAt: 0,
+      rosterAt: 0,
+      rosterDirty: false,
+      paletteRestored: false,
+      pendingSelection: null,
+      uidIndex: new Map(),
+      chips: null,
+    };
+    document.body.classList.add("is-live");
+    ui.battleTitle.textContent = battle.title;
+    document.title = `${battle.title} — Heimdall`;
+    mountLiveControls();
+    populateServers();
+    setupPlayerControls();
+    resetView();
+    renderLiveStatus();
+    const feed = HeimdallLive.connect(HeimdallLive.relayUrl(location.href), {
+      onMessage: handleLiveMessage,
+      onConnection: change => {
+        live.connection = change;
+        if (change.state === "open") live.hasSnapshot = false;
+        renderLiveStatus();
+        renderCameraChips();
+      },
+    });
+    window.addEventListener("online", feed.reconnectNow);
+  }
+
+  function mountLiveControls() {
+    ui.showInferred.closest("label").hidden = true;
+    document.querySelector(".key-inferred")?.closest("span")?.remove();
+    const shieldKey = document.createElement("span");
+    const swatch = document.createElement("i");
+    swatch.className = "key-shield";
+    shieldKey.append(swatch, "Shield");
+    document.querySelector(".map-key")?.append(shieldKey);
+    const eyebrow = ui.integrityNotice.querySelector(".eyebrow");
+    if (eyebrow) eyebrow.textContent = "Live feed";
+    live.chips = document.createElement("div");
+    live.chips.className = "live-cameras";
+    live.chips.setAttribute("aria-label", "Camera status");
+    ui.timeline.after(live.chips);
+  }
+
+  function handleLiveMessage(message) {
+    live.clockOffset = HeimdallLive.syncClock(live.clockOffset, message, Date.now());
+    if (message.t) live.lastDataT = message.type === "snap" ? message.t : Math.max(live.lastDataT, message.t);
+    if (message.type === "status") {
+      live.cameras = message.cameras;
+      renderCameraChips();
+      renderLiveStatus();
+      return;
+    }
+    if (message.type === "snap") resetLiveState(message.mapWidth);
+    applyLivePlayers(message.players);
+    for (const event of message.events) applyLiveEvent(event);
+    live.received += message.events.length;
+    live.lastDataAt = Date.now();
+    if (message.type === "snap") {
+      live.hasSnapshot = true;
+      restoreLiveSelection();
+      live.rosterAt = 0;
+      if (!live.fitted) {
+        live.fitted = true;
+        fitLiveView();
+      }
+    }
+    redrawNeeded = true;
+    renderLiveStatus();
+  }
+
+  // resetLiveState empties the map for a fresh snapshot. Relay indices can
+  // change (the relay restarted), so selections are carried over by uid.
+  function resetLiveState(mapWidth) {
+    live.pendingSelection = {
+      selected: selectedPlayer >= 0 ? playerFor(selectedPlayer)[0] : "",
+      featured: [...featuredPlayers].map(index => playerFor(index)[0]).filter(Boolean),
+    };
+    manifest.mapWidth = mapWidth || manifest.mapWidth;
+    manifest.players = [];
+    manifest.baseActors = [];
+    live.uidIndex = new Map();
+    bases = new Map();
+    activeMarches = new Map();
+    playerObservations.clear();
+    featuredPlayers.clear();
+    selectedPlayer = -1;
+  }
+
+  function restoreLiveSelection() {
+    const pending = live.pendingSelection;
+    live.pendingSelection = null;
+    if (!pending) return;
+    for (const uid of pending.featured) {
+      const index = live.uidIndex.get(uid);
+      if (index !== undefined) featuredPlayers.add(index);
+    }
+    selectedPlayer = live.uidIndex.get(pending.selected) ?? -1;
+  }
+
+  function applyLivePlayers(rows) {
+    for (const row of rows) {
+      manifest.players[row.index] = [row.uid, row.name, row.abbr, row.server, ""];
+      manifest.baseActors[row.index] = [row.name, row.abbr, row.server, "", row.index];
+      live.uidIndex.set(row.uid, row.index);
+      if (isCurated(row.name)) featuredPlayers.add(row.index);
+    }
+    if (rows.length) live.rosterDirty = true;
+  }
+
+  // applyLiveEvent also keeps a short trail of each player's base positions
+  // for the spotlight breadcrumbs.
+  function applyLiveEvent(event) {
+    applyEvent(event);
+    if (event[0] !== 2 || event[2] !== 0) return;
+    const trail = playerObservations.get(event[3]) || [];
+    if (trail.at(-1)?.position === event[4]) return;
+    trail.push({ time: event[1], position: event[4] });
+    if (trail.length > LIVE_TRAIL_LIMIT) trail.shift();
+    playerObservations.set(event[3], trail);
+  }
+
+  function liveClock() {
+    return Date.now() + (live.clockOffset ?? 0);
+  }
+
+  function tickLive(now) {
+    currentTime = liveClock();
+    if (now - live.readoutAt >= LIVE_READOUT_MS) {
+      live.readoutAt = now;
+      updateReadout();
+    }
+    if (live.rosterDirty && now - live.rosterAt >= LIVE_ROSTER_MS) refreshLiveRoster(now);
+  }
+
+  function refreshLiveRoster(now) {
+    // Rebuilding a select closes it, so wait while the viewer has one open.
+    if (document.activeElement?.tagName === "SELECT") return;
+    live.rosterDirty = false;
+    live.rosterAt = now;
+    populateServers();
+    if (!live.paletteRestored && manifest.players.length) {
+      live.paletteRestored = true;
+      restorePalette();
+    } else {
+      updatePaletteControls();
+    }
+    refreshPlayerList();
+  }
+
+  // fitLiveView frames every known base, or the whole map before any arrive.
+  function fitLiveView() {
+    resizeCanvas();
+    const { width, height } = screenSize();
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const base of bases.values()) {
+      const { x, y } = unpack(base.position);
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    if (minX > maxX) {
+      const half = manifest.mapWidth / 2;
+      camera = { x: half, y: half, zoom: clamp(Math.min(width, height) / (manifest.mapWidth * 1.06), .25, 20) };
+    } else {
+      const spanX = maxX - minX + LIVE_FIT_MARGIN;
+      const spanY = maxY - minY + LIVE_FIT_MARGIN;
+      camera = { x: (minX + maxX) / 2, y: (minY + maxY) / 2, zoom: clamp(Math.min(width / spanX, height / spanY), .25, 20) };
+    }
+    redrawNeeded = true;
+  }
+
+  function renderLiveStatus() {
+    const status = HeimdallLive.describeStatus(live, Date.now(), formatClock);
+    setText(ui.loadState, status.headline);
+    ui.loadState.className = `load-state live-state is-${status.level}`;
+    ui.integrityNotice.hidden = status.level === "live";
+    ui.integrityNotice.classList.toggle("is-gap", status.level === "down" || status.level === "offline");
+    ui.integrityNotice.classList.toggle("is-warn", status.level === "stale" || status.level === "connecting");
+    setText(ui.integrityTitle, status.title);
+    setText(ui.integrityText, status.detail);
+    setText(ui.integrityState, status.pill);
+  }
+
+  function renderCameraChips() {
+    if (!live.chips) return;
+    live.chips.replaceChildren(...live.cameras.map(camera => {
+      const chip = document.createElement("span");
+      chip.className = `camera-chip is-${camera.state}`;
+      chip.title = camera.detail || camera.state;
+      const state = document.createElement("b");
+      state.textContent = camera.state;
+      chip.append(document.createElement("i"), camera.camera, state);
+      return chip;
+    }));
+    live.chips.classList.toggle("is-frozen", live.connection.state !== "open");
+  }
+
+  function setText(element, text) {
+    if (element.textContent !== text) element.textContent = text;
   }
 
   function formatDuration(ms) {
@@ -873,28 +1152,25 @@
       if (!alliances.has(key)) alliances.set(key, { abbr: abbr || `${alliance.slice(0, 8)}…`, servers: new Set() });
       if (server) alliances.get(key).servers.add(server);
     };
-    for (const player of manifest.players) remember(player[2], player[3], player[4]);
-    for (const base of manifest.baseActors) remember(base[1], base[2], base[3]);
+    // forEach skips holes: live player indices can arrive out of order.
+    manifest.players.forEach(player => remember(player[2], player[3], player[4]));
+    manifest.baseActors.forEach(base => remember(base[1], base[2], base[3]));
     const servers = [...serverCounts].sort((left, right) => right[1] - left[1] || left[0] - right[0]);
-    for (const [server] of servers) {
-      const option = document.createElement("option");
-      option.value = String(server);
-      option.textContent = `Server ${server}`;
-      ui.serverFilter.append(option);
-      ui.sideAServer.append(option.cloneNode(true));
-      ui.sideBServer.append(option.cloneNode(true));
-    }
+    // Rebuilt on every live roster change, so keep whatever the viewer chose.
+    const previous = {
+      filter: ui.serverFilter.value,
+      sideA: ui.sideAServer.value,
+      sideB: ui.sideBServer.value,
+      alliance: ui.highlightAlliance.value,
+    };
+    const serverOptions = () => servers.map(([server]) => new Option(`Server ${server}`, String(server)));
+    ui.serverFilter.replaceChildren(new Option("All servers", "all"), ...serverOptions());
+    ui.sideAServer.replaceChildren(...serverOptions());
+    ui.sideBServer.replaceChildren(...serverOptions());
     const preferredServers = battle?.servers || [];
-    if (preferredServers[0] && [...ui.sideAServer.options].some(option => option.value === String(preferredServers[0]))) {
-      ui.sideAServer.value = String(preferredServers[0]);
-    } else if (servers[0]) {
-      ui.sideAServer.value = String(servers[0][0]);
-    }
-    if (preferredServers[1] && [...ui.sideBServer.options].some(option => option.value === String(preferredServers[1]))) {
-      ui.sideBServer.value = String(preferredServers[1]);
-    } else if (servers[1]) {
-      ui.sideBServer.value = String(servers[1][0]);
-    }
+    selectFirst(ui.serverFilter, [previous.filter, "all"]);
+    selectFirst(ui.sideAServer, [previous.sideA, preferredServers[0], servers[0]?.[0]]);
+    selectFirst(ui.sideBServer, [previous.sideB, preferredServers[1], servers[1]?.[0]]);
     const abbrCounts = new Map();
     for (const value of alliances.values()) abbrCounts.set(value.abbr, (abbrCounts.get(value.abbr) || 0) + 1);
     const allianceGroups = new Map();
@@ -906,18 +1182,23 @@
       if (!allianceGroups.has(label)) allianceGroups.set(label, new Set());
       allianceGroups.get(label).add(key);
     }
-    highlightAllianceGroups = new Map();
+    // Values are label-based so a growing live roster does not shift them.
     const allianceOptions = [...allianceGroups]
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, keys], index) => [`highlight:${index}`, label, keys]);
-    for (const [group, label, keys] of allianceOptions) {
-      const option = document.createElement("option");
-      option.value = group;
-      option.textContent = label;
-      ui.highlightAlliance.append(option);
-      highlightAllianceGroups.set(group, keys);
-    }
-    restorePalette();
+      .map(([label, keys]) => [`highlight:${label}`, label, keys]);
+    highlightAllianceGroups = new Map(allianceOptions.map(([group, , keys]) => [group, keys]));
+    ui.highlightAlliance.replaceChildren(
+      new Option("None", ""),
+      ...allianceOptions.map(([group, label]) => new Option(label, group)),
+    );
+    selectFirst(ui.highlightAlliance, [previous.alliance, ""]);
+  }
+
+  // selectFirst selects the first candidate value the select offers.
+  function selectFirst(select, candidates) {
+    const offered = new Set([...select.options].map(option => option.value));
+    const choice = candidates.find(value => value !== undefined && value !== null && offered.has(String(value)));
+    if (choice !== undefined) select.value = String(choice);
   }
 
   function restorePalette() {
@@ -1083,7 +1364,7 @@
   }, { passive: false });
 
   document.addEventListener("keydown", event => {
-    if (!manifest || ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement.tagName)) return;
+    if (!manifest || live || ["INPUT", "SELECT", "BUTTON"].includes(document.activeElement.tagName)) return;
     if (event.code === "Space") {
       event.preventDefault();
       setPlaying(!playing);
@@ -1096,5 +1377,6 @@
 
   window.addEventListener("resize", () => { redrawNeeded = true; });
   requestAnimationFrame(frame);
-  loadReplay();
+  if (LIVE_REQUESTED) startLive();
+  else loadReplay();
 })();
