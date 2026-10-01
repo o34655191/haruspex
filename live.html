@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Choose a Watchtower satellite and watch a Last War warzone live.">
+<title>Watchtower — Satellites</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="watchtower.css?v=20261002-mvp">
+</head>
+<body class="wt-page">
+  <main class="wt-shell">
+    <nav class="wt-nav" aria-label="Breadcrumb">
+      <a class="back" href="index.html">&larr; Programs</a>
+      <span id="orbitCount" role="status">Contacting the constellation…</span>
+    </nav>
+
+    <header class="wt-hero">
+      <svg class="orbit-mark" viewBox="0 0 92 92" aria-hidden="true">
+        <defs>
+          <radialGradient id="planet" cx="38%" cy="34%"><stop offset="0" stop-color="#2b3550"/><stop offset=".75" stop-color="#121826"/></radialGradient>
+        </defs>
+        <g transform="rotate(-18 46 46)">
+          <ellipse cx="46" cy="46" rx="41" ry="14" fill="none" stroke="rgba(167,182,255,.4)"/>
+          <circle cx="46" cy="46" r="16" fill="url(#planet)" stroke="rgba(167,182,255,.55)"/>
+          <circle r="3.5" fill="#d3dbff" class="orbit-sat">
+            <animateMotion dur="9s" repeatCount="indefinite" path="M87 46A41 14 0 1 1 5 46A41 14 0 1 1 87 46"/>
+          </circle>
+        </g>
+      </svg>
+      <div class="eyebrow">Project Watchtower</div>
+      <h1>Watchtower</h1>
+      <p>Choose a camera to watch its warzone live. Sentinel is in orbit; three more cameras are planned. Nothing is recorded: when it's over, it's over.</p>
+    </header>
+
+    <section aria-labelledby="constellationTitle">
+      <div class="wt-heading">
+        <div>
+          <div class="eyebrow">Live observation</div>
+          <h2 id="constellationTitle">The constellation</h2>
+        </div>
+        <span>1 in orbit · 3 planned</span>
+      </div>
+      <ol class="sat-grid" id="satList"></ol>
+    </section>
+
+    <div class="wt-strip">
+      <span>Missed it? Recorded battles live in Heimdall's archive.</span>
+      <a href="heimdall-battles.html">Open Heimdall →</a>
+    </div>
+    <div class="wt-strip">
+      <span>Satellites are steered from Mission Control with the operator key.</span>
+      <a href="live-control.html">Mission Control →</a>
+    </div>
+
+    <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
+  </main>
+
+  <script src="heimdall-live.js?v=20261002-mvp"></script>
+  <script src="watchtower.js?v=20261002-mvp"></script>
+  <script>
+    (() => {
+      "use strict";
+      const W = window.Watchtower;
+      const list = document.getElementById("satList");
+      const count = document.getElementById("orbitCount");
+      const relay = W.relayHttp();
+      const REFRESH_MS = 15000;
+      const PATCHES = { sat01: "◈", sat02: "✦", sat03: "⌁", sat04: "◇" };
+      // SMIL ignores prefers-reduced-motion, so park the orbiting dot by hand.
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.querySelector(".orbit-mark")?.pauseAnimations();
+
+      function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      const whole = value => Number.isInteger(value) && value >= 0 && value <= 10000;
+      function checkedArea(area) {
+        if (!area || ![area.left, area.bottom, area.right, area.top].every(whole) || area.right <= area.left || area.top <= area.bottom) return null;
+        return { server: whole(area.server) ? area.server : 0, left: area.left, bottom: area.bottom, right: area.right, top: area.top };
+      }
+
+      // feedOf reads a satellite's relay health (/healthz); null = unreachable.
+      function feedOf(sat, health) {
+        if (!sat.live) return { state: "pad" };
+        if (!health) return { state: "offline" };
+        const cam = (health.cameras || []).find(c => c.camera === sat.id) || (health.cameras || [])[0] || {};
+        return {
+          state: W.STATES[cam.state] ? cam.state : "connecting",
+          name: typeof cam.name === "string" && cam.name ? cam.name : sat.name,
+          detail: typeof cam.detail === "string" ? cam.detail : "",
+          area: checkedArea(cam.area),
+          movedAt: Number.isFinite(cam.movedAt) ? cam.movedAt : 0,
+          bases: Number(health.bases) || 0,
+          marches: Number(health.marches) || 0,
+          viewers: Number(health.viewers) || 0,
+        };
+      }
+
+      function thumbnail(sat, feed, layout) {
+        const svg = W.warzoneSvg(layout, { label: feed.area ? `${feed.name} over S${feed.area.server}` : `${sat.name}: ${W.STATES[feed.state]}` });
+        W.dimOutside(svg, feed.area ? [feed.area] : [], feed.area && feed.state === "live" ? 0.45 : 0.62);
+        if (feed.area) W.boxShape(svg, feed.area, { tone: feed.state, dashed: feed.state !== "live", fill: 0.08, width: 2 });
+        return svg;
+      }
+
+      function facts(feed) {
+        const rows = [];
+        if (feed.area) rows.push(["Server", `S${feed.area.server}`], ["Centre", W.fmtCentre(feed.area)], ["Box", W.fmtArea(feed.area)]);
+        if (feed.movedAt) rows.push(["Moved", W.ago(feed.movedAt)]);
+        if (feed.state === "live" || feed.state === "moving") rows.push(["Seen", `${feed.bases.toLocaleString()} bases · ${feed.marches} marches`]);
+        if ((feed.state === "down" || feed.state === "stale") && feed.detail) rows.push(["Status", feed.detail]);
+        if (feed.state === "offline") rows.push(["Relay", "not answering"]);
+        if (feed.state === "pad") rows.push(["Availability", "Planned camera"]);
+        if (feed.viewers) rows.push(["Watching", `${feed.viewers}`]);
+        const dl = element("dl", "sat-facts");
+        for (const [term, value] of rows) dl.append(element("dt", "", term), element("dd", "", value));
+        return dl;
+      }
+
+      function card(sat, feed, layout) {
+        const node = element(sat.live ? "a" : "div", `sat-card is-${feed.state}`);
+        if (sat.live) node.href = `live-watch.html?sat=${encodeURIComponent(sat.id)}`;
+        else node.setAttribute("aria-disabled", "true");
+        const thumb = element("div", "sat-thumb");
+        thumb.append(element("div", "mission-patch", PATCHES[sat.id]), thumbnail(sat, feed, layout));
+        thumb.firstChild.setAttribute("aria-hidden", "true");
+        const body = element("div", "sat-body");
+        const top = element("div", "sat-top");
+        top.append(element("span", "sat-code", sat.code), element("span", `state-pill is-${feed.state}`, W.STATES[feed.state]));
+        body.append(top, element("h3", "sat-name", feed.name || sat.name), facts(feed), element("p", "sat-namesake", sat.namesake));
+        body.append(element("span", "sat-open", sat.live ? "Watch →" : "Not implemented yet"));
+        node.append(thumb, body);
+        const item = element("li");
+        item.append(node);
+        return item;
+      }
+
+      async function refresh() {
+        let health = null;
+        try {
+          const response = await fetch(`${relay}/healthz`, { cache: "no-store" });
+          if (response.ok) health = await response.json();
+        } catch (error) {
+          console.warn("Watchtower: relay health unavailable", error);
+        }
+        const feeds = W.SATELLITES.map(sat => feedOf(sat, health));
+        const server = feeds.find(feed => feed.area)?.area.server || 472;
+        const layout = await W.loadLayout(server);
+        list.replaceChildren(...W.SATELLITES.map((sat, i) => card(sat, feeds[i], layout)));
+        const sentinel = feeds[0];
+        count.textContent = `${sentinel.name || W.SATELLITES[0].name}: ${W.STATES[sentinel.state]} · 3 planned`;
+        setTimeout(refresh, REFRESH_MS);
+      }
+      refresh();
+    })();
+  </script>
+</body>
+</html>

@@ -22,7 +22,7 @@
   // How far past the warzone's edge the view may pan or zoom out, as a share
   // of the warzone's width.
   const VIEW_MARGIN = .12;
-  const CAMERA_STATE_COLORS = { live: "#8de0b5", connecting: "#ffd166", stale: "#ffd166", down: "#ff5d5d" };
+  const CAMERA_STATE_COLORS = { live: "#8de0b5", moving: "#ffd166", connecting: "#ffd166", stale: "#ffd166", down: "#ff5d5d" };
   // Season structures (data/heimdall/layouts/<server>.json) by kind; the
   // capitol has its own overlay, so it is only a click target here.
   const STRUCTURE_STYLES = {

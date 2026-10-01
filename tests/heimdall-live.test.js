@@ -55,6 +55,7 @@ test("relayUrl uses the public relay unless a local dev page overrides it", () =
   assert.equal(live.relayUrl("http://localhost:8000/heimdall.html?live&relay=not a url"), relay);
   assert.equal(live.relayUrl("http://[::1]:8000/heimdall.html?live&relay=ws://[::1]:8082/ws"), "ws://[::1]:8082/ws");
   assert.equal(live.relayUrl("http://localhost.evil.com/heimdall.html?live&relay=ws://evil.com/ws"), relay);
+  assert.equal(live.relayUrl("http://localhost:8000/live-control.html?relay=wss://evil.example/ws"), relay);
 });
 
 test("retryDelay doubles from one second, caps at thirty and keeps half as a floor", () => {
@@ -97,9 +98,22 @@ test("parseMessage keeps well-formed rows, events and cameras and drops the rest
   ]);
   assert.deepEqual(message.events.map(event => event[0]), [2, 0, 1]);
   assert.deepEqual(message.cameras, [
-    { camera: "se", state: "live", detail: "", area: null },
-    { camera: "nw", state: "down", detail: "", area: null },
+    { camera: "se", name: "", state: "live", detail: "", area: null, movedAt: 0 },
+    { camera: "nw", name: "", state: "down", detail: "", area: null, movedAt: 0 },
   ]);
+});
+
+test("parseMessage keeps a moving camera's name and move time", () => {
+  const [camera] = live.parseMessage(JSON.stringify({
+    type: "status",
+    cameras: [{ camera: "sat01", name: "Sentinel", state: "moving", movedAt: 1790000000000 }],
+  })).cameras;
+  assert.equal(camera.state, "moving");
+  assert.equal(camera.name, "Sentinel");
+  assert.equal(camera.movedAt, 1790000000000);
+  const [odd] = live.parseMessage(JSON.stringify({ type: "status", cameras: [{ camera: "x", name: 5, movedAt: "soon" }] })).cameras;
+  assert.equal(odd.name, "");
+  assert.equal(odd.movedAt, 0);
 });
 
 test("parseMessage keeps a camera's area only when it is a real rectangle", () => {

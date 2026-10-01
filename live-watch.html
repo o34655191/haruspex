@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Watch a Watchtower satellite's live view of a Last War warzone.">
+<title>Watchtower — Watch</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="watchtower.css?v=20261002-mvp">
+</head>
+<body class="wt-page">
+  <main class="wt-shell is-wide">
+    <header class="wt-watch-head">
+      <a class="back" href="live.html">&larr; Satellites</a>
+      <div>
+        <div class="eyebrow" id="satEyebrow">Watchtower</div>
+        <h1><span id="satName">Satellite</span><small id="satWhere"></small></h1>
+      </div>
+      <div class="wt-watch-status">
+        <span class="state-pill is-connecting" id="satState" role="status">Connecting</span>
+        <span id="satFresh"></span>
+      </div>
+    </header>
+
+    <nav class="sat-switch" id="satSwitch" aria-label="Satellites"></nav>
+
+    <section class="orbit-notice" id="orbitNotice" aria-live="polite" hidden>
+      <div class="mark" aria-hidden="true">&#8599;</div>
+      <div>
+        <h2 id="noticeTitle"></h2>
+        <p id="noticeText"></p>
+      </div>
+      <button type="button" id="noticeClose">Got it</button>
+    </section>
+
+    <section class="wt-stage" aria-label="Live warzone map">
+      <canvas id="map" tabindex="0" aria-label="Live warzone map. Drag to pan, use the wheel or the zoom buttons to zoom."></canvas>
+      <div class="stage-key" aria-hidden="true">
+        <span><i class="k-home"></i>Home server</span>
+        <span><i class="k-foreign"></i>Foreign</span>
+        <span><i class="k-none"></i>No alliance</span>
+        <span><i class="k-march"></i>March</span>
+        <span><i class="k-sat"></i>Satellite box</span>
+      </div>
+      <div class="stage-zoom" aria-label="Map zoom controls">
+        <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+        <button id="zoomOut" type="button" aria-label="Zoom out">&minus;</button>
+      </div>
+      <div class="stage-compass" aria-label="North is up"><span>N</span><i aria-hidden="true"></i><span>S</span></div>
+      <div class="stage-overlay" id="stageOverlay" hidden>
+        <div>
+          <strong id="overlayTitle"></strong>
+          <p id="overlayText"></p>
+          <small id="overlayMeta"></small>
+        </div>
+      </div>
+    </section>
+
+    <section class="wt-bar" aria-label="Feed status and view options">
+      <span><b id="marchCount">0</b> marches on the move</span>
+      <span><b id="baseCount">0</b> bases in view</span>
+      <span id="feedNote"></span>
+      <span class="spacer"></span>
+      <label><input type="checkbox" id="follow" checked> Follow satellite</label>
+      <label><input type="checkbox" id="showRoutes" checked> Routes</label>
+      <label><input type="checkbox" id="showLabels"> Alliance labels</label>
+      <button type="button" id="resetView">Reset view</button>
+    </section>
+
+    <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
+  </main>
+  <noscript>The live map needs JavaScript.</noscript>
+
+  <script src="heimdall-live.js?v=20261002-mvp"></script>
+  <script src="watchtower-feed.js?v=20261002-mvp"></script>
+  <script src="watchtower.js?v=20261002-mvp"></script>
+  <script src="live-watch.js?v=20261002-mvp"></script>
+</body>
+</html>

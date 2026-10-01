@@ -25,21 +25,23 @@
   const DEV_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
   const MIN_EVENT_LENGTH = new Map([[0, 12], [1, 3], [2, 5]]);
   const POSITION_SLOTS = new Map([[0, [5, 6]], [1, []], [2, [4]]]);
-  const CAMERA_STATES = new Set(["connecting", "live", "stale", "down"]);
+  const CAMERA_STATES = new Set(["connecting", "live", "moving", "stale", "down"]);
 
   const scalar = value => typeof value === "string" || typeof value === "number" ? String(value) : "";
   const validPosition = value => Number.isInteger(value) && value >= 0 && value < MAX_POSITION;
 
   // relayUrl picks the feed address. ?relay= is honoured only when the page
-  // itself runs on a local dev host, so a shared link cannot point viewers
-  // at somebody else's server.
+  // itself runs on a local dev host and the relay is local too, so a shared
+  // link cannot point viewers (or Mission Control's key) at somebody else's
+  // server.
   function relayUrl(pageUrl) {
     const page = new URL(pageUrl);
     const override = page.searchParams.get("relay");
     if (!override || !DEV_HOSTS.has(page.hostname)) return DEFAULT_RELAY;
     try {
       const target = new URL(override);
-      return target.protocol === "ws:" || target.protocol === "wss:" ? target.href : DEFAULT_RELAY;
+      const local = DEV_HOSTS.has(target.hostname);
+      return local && (target.protocol === "ws:" || target.protocol === "wss:") ? target.href : DEFAULT_RELAY;
     } catch {
       return DEFAULT_RELAY;
     }
@@ -90,9 +92,11 @@
       .filter(camera => camera && typeof camera.camera === "string")
       .map(camera => ({
         camera: camera.camera,
+        name: typeof camera.name === "string" ? camera.name : "",
         state: CAMERA_STATES.has(camera.state) ? camera.state : "down",
         detail: typeof camera.detail === "string" ? camera.detail : "",
         area: validArea(camera.area),
+        movedAt: Number.isFinite(camera.movedAt) && camera.movedAt > 0 ? camera.movedAt : 0,
       }));
   }
 
