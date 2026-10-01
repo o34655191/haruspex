@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Watchtower operator page: aim the satellites.">
+<meta name="robots" content="noindex">
+<title>Watchtower — Mission Control</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="watchtower.css?v=2">
+</head>
+<body class="wt-page">
+  <main class="wt-shell is-wide">
+    <div class="mock-banner">Mockup · nothing is sent · the real page is served on the tailnet only</div>
+    <nav class="wt-nav" aria-label="Breadcrumb">
+      <a class="back" href="live.html">&larr; Satellites</a>
+      <span id="fleetSummary" role="status"></span>
+    </nav>
+
+    <header class="mc-head">
+      <div>
+        <div class="eyebrow">Watchtower · Operator</div>
+        <h1>Mission Control</h1>
+        <p>Pick a satellite, choose where it looks, confirm. Box size, refresh rate and the server list live on AWS; this page only aims.</p>
+      </div>
+      <span class="tailnet-badge" title="Reachable through Tailscale serve, never through Funnel">&#9679; Tailnet only</span>
+    </header>
+
+    <div class="mc-grid">
+      <aside class="mc-roster" aria-labelledby="rosterTitle">
+        <div class="mc-card">
+          <h2 id="rosterTitle">Satellites</h2>
+          <div class="roster" id="roster"></div>
+        </div>
+      </aside>
+
+      <section class="mc-card picker-card" aria-labelledby="pickerTitle">
+        <div class="picker-head">
+          <span><strong id="pickerTitle">Warzone</strong> · <span id="pickerSub"></span></span>
+          <span class="preview-chip is-same" id="previewChip">Current position</span>
+        </div>
+        <div class="picker" id="picker"></div>
+        <p class="picker-help" id="pickerHelp"></p>
+      </section>
+
+      <aside class="mc-settings">
+        <section class="mc-card aim-card" aria-labelledby="aimTitle">
+          <h2 id="aimTitle">Aim</h2>
+          <div class="field">
+            <label for="server">Server</label>
+            <select id="server"></select>
+            <span class="hint" id="serverHint"></span>
+          </div>
+          <div class="field">
+            <span>Centre · in-game X, Y</span>
+            <div class="xy">
+              <label>X<input id="cx" type="number" inputmode="numeric" min="0" max="999" step="1"></label>
+              <label>Y<input id="cy" type="number" inputmode="numeric" min="0" max="999" step="1"></label>
+            </div>
+            <span class="hint" id="xyHint" aria-live="polite"></span>
+          </div>
+          <div class="field">
+            <span>Presets</span>
+            <div class="presets" id="presets"></div>
+          </div>
+          <div class="mc-actions">
+            <button class="btn btn-primary" id="confirm" type="button">Apply position</button>
+            <button class="btn" id="reset" type="button">Reset</button>
+          </div>
+          <p class="mc-note" id="actionNote" aria-live="polite"></p>
+          <ol class="stepper" id="stepper" aria-label="Move progress" hidden></ol>
+          <button class="btn btn-wide" id="reacquire" type="button" hidden>Re-acquire signal</button>
+        </section>
+
+        <section class="mc-card" aria-labelledby="cfgTitle">
+          <h2 id="cfgTitle">Set on AWS · read only</h2>
+          <dl class="cfg" id="cfg"></dl>
+          <p class="mc-note" id="cfgNote"></p>
+        </section>
+
+        <section class="mc-card strike" aria-labelledby="strikeTitle">
+          <h2 id="strikeTitle">Ordnance</h2>
+          <button class="strike-btn" id="strike" type="button" aria-disabled="true" aria-describedby="strikeQuip">Call for an orbital strike</button>
+          <span class="strike-tag">Just a joke · no strikes</span>
+          <p class="strike-quip" id="strikeQuip" aria-live="polite"></p>
+        </section>
+      </aside>
+    </div>
+
+    <section class="mc-card" aria-labelledby="logTitle" style="margin-top:14px">
+      <h2 id="logTitle">Mission log</h2>
+      <ol class="log" id="log"></ol>
+    </section>
+
+    <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
+  </main>
+
+  <script src="watchtower-mock.js?v=2"></script>
+  <script src="live-control.js?v=2"></script>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Choose a Watchtower satellite and watch a Last War warzone live.">
+<title>Watchtower — Satellites</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="watchtower.css?v=2">
+</head>
+<body class="wt-page">
+  <main class="wt-shell">
+    <div class="mock-banner">Mockup · sample data · nothing here is live</div>
+    <nav class="wt-nav" aria-label="Breadcrumb">
+      <a class="back" href="index.html">&larr; Programs</a>
+      <span id="orbitCount" role="status">Contacting the constellation…</span>
+    </nav>
+
+    <header class="wt-hero">
+      <svg class="orbit-mark" viewBox="0 0 92 92" aria-hidden="true">
+        <defs>
+          <radialGradient id="planet" cx="38%" cy="34%"><stop offset="0" stop-color="#2b3550"/><stop offset=".75" stop-color="#121826"/></radialGradient>
+        </defs>
+        <g transform="rotate(-18 46 46)">
+          <ellipse cx="46" cy="46" rx="41" ry="14" fill="none" stroke="rgba(167,182,255,.4)"/>
+          <circle cx="46" cy="46" r="16" fill="url(#planet)" stroke="rgba(167,182,255,.55)"/>
+          <circle r="3.5" fill="#d3dbff" class="orbit-sat">
+            <animateMotion dur="9s" repeatCount="indefinite" path="M87 46A41 14 0 1 1 5 46A41 14 0 1 1 87 46"/>
+          </circle>
+        </g>
+      </svg>
+      <div class="eyebrow">Project Watchtower</div>
+      <h1>Watchtower</h1>
+      <p>Choose a camera to watch its warzone. Sentinel is available in this preview; three more cameras are planned.</p>
+    </header>
+
+    <section aria-labelledby="constellationTitle">
+      <div class="wt-heading">
+        <div>
+          <div class="eyebrow">Live observation</div>
+          <h2 id="constellationTitle">The constellation</h2>
+        </div>
+        <span>1 camera preview · 3 planned</span>
+      </div>
+      <ol class="sat-grid" id="satList"></ol>
+    </section>
+
+    <div class="wt-strip">
+      <span>Missed it? Recorded battles live in Heimdall's archive.</span>
+      <a href="../heimdall-battles.html">Open Heimdall →</a>
+    </div>
+    <div class="wt-strip">
+      <span>Satellites are steered from Mission Control, on the operator's tailnet.</span>
+      <a href="live-control.html">Mission Control →</a>
+    </div>
+
+    <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
+  </main>
+
+  <script src="watchtower-mock.js?v=2"></script>
+  <script>
+    (() => {
+      "use strict";
+      const W = window.Watchtower;
+      const list = document.getElementById("satList");
+      const count = document.getElementById("orbitCount");
+      // SMIL ignores prefers-reduced-motion, so park the orbiting dot by hand.
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) document.querySelector(".orbit-mark")?.pauseAnimations();
+
+      function element(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function thumbnail(sat, layout) {
+        const svg = W.warzoneSvg(layout, { label: sat.area ? `${sat.name} over S${sat.server}` : `${sat.name} is not launched` });
+        if (!sat.area) {
+          W.dimOutside(svg, [], 0.62);
+          return svg;
+        }
+        if (sat.state === "moving") W.boxShape(svg, sat.previous.area, { tone: "other", fill: 0, width: 1 });
+        W.dimOutside(svg, [sat.area], sat.state === "down" ? 0.62 : 0.45);
+        W.boxShape(svg, sat.area, { tone: sat.state, dashed: sat.state !== "live", fill: 0.08, width: 2 });
+        return svg;
+      }
+
+      function facts(sat) {
+        const rows = [];
+        if (sat.area) {
+          rows.push(["Server", `S${sat.server}`], ["Centre", W.fmtCentre(sat.area)], ["Box", W.fmtArea(sat.area)]);
+        }
+        if (sat.state === "live") rows.push(["Moved", W.ago(sat.movedAt)], ["Seen", `${sat.bases.toLocaleString()} bases · ${sat.marches} marches`]);
+        if (sat.state === "moving") rows.push(["Burn", `started ${W.ago(sat.movedAt)}`]);
+        if (sat.state === "down") rows.push(["Last contact", `${W.ago(sat.lostAt)} (${sat.lostReason})`]);
+        if (sat.state === "pad") rows.push(["Availability", "Future camera"]);
+        if (sat.viewers) rows.push(["Watching", `${sat.viewers}`]);
+        const dl = element("dl", "sat-facts");
+        for (const [term, value] of rows) dl.append(element("dt", "", term), element("dd", "", value));
+        return dl;
+      }
+
+      function card(sat, layout) {
+        const watchable = sat.implemented;
+        const node = element(watchable ? "a" : "div", `sat-card is-${sat.state}`);
+        if (watchable) node.href = `live-watch.html?sat=${encodeURIComponent(sat.id)}`;
+        else node.setAttribute("aria-disabled", "true");
+
+        const thumb = element("div", "sat-thumb");
+        const badge = element("div", "mission-patch");
+        badge.textContent = ({sat01:"◈",sat02:"✦",sat03:"⌁",sat04:"◇"})[sat.id];
+        badge.setAttribute("aria-hidden", "true");
+        thumb.append(badge, thumbnail(sat, layout));
+
+        const body = element("div", "sat-body");
+        const top = element("div", "sat-top");
+        top.append(element("span", "sat-code", sat.code), element("span", `state-pill is-${sat.state}`, W.STATES[sat.state].label));
+        body.append(top, element("h3", "sat-name", sat.name), facts(sat), element("p", "sat-namesake", sat.namesake));
+        body.append(element("span", "sat-open", watchable ? "Watch →" : "Not implemented yet"));
+
+        node.append(thumb, body);
+        const item = element("li");
+        item.append(node);
+        return item;
+      }
+
+      W.loadLayout().then(layout => {
+        list.replaceChildren(...W.SATELLITES.map(sat => card(sat, layout)));
+        const inOrbit = W.SATELLITES.filter(sat => sat.state === "live").length;
+        count.textContent = `${inOrbit} camera preview · ${W.SATELLITES.length - inOrbit} not implemented`;
+      });
+    })();
+  </script>
+</body>
+</html>
