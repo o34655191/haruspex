@@ -8,7 +8,6 @@
 
   const W = window.Watchtower;
   const $ = id => document.getElementById(id);
-  const relay = W.relayHttp();
   const KEY_STORE = "watchtower.operatorKey";
   const POLL_MS = 3000;
   const POLL_MOVING_MS = 1000;
@@ -21,6 +20,7 @@
   const MOVE_STEPS = ["Sent to the relay", "Relay saved the new box", "Pictures from the new box"];
   const PRESETS = [["Capitol", 500, 500], ["NW", 250, 750], ["NE", 750, 750], ["SW", 250, 250], ["SE", 750, 250]];
   const SERVERS_RETRY_MS = 60000;
+  const FLEET_POLL_MS = 10000;
   // A season map is three warzones a side, read north-up; the middle has no server.
   const SEASON_GRID = ["NW", "N", "NE", "W", "", "E", "SW", "S", "SE"];
   const POSITION_NAMES = {
@@ -28,8 +28,13 @@
   };
   const NO_LAYOUT = { server: 0, footprints: {}, structures: [] };
 
-  const sat = W.SATELLITES.find(s => s.live);
+  // ?sat= picks the satellite to aim; the roster switches by reloading with it.
+  const chosen = W.byId(new URLSearchParams(location.search).get("sat"));
+  const sat = chosen?.live ? chosen : W.SATELLITES.find(s => s.live);
+  const relay = W.relayHttp(sat);
   let state = null;        // the relay's last /control/state
+  let fleet = new Map();   // other live satellites' last /control/state; null = unreachable
+  let fleetAt = 0;         // when to read the other satellites next
   let stateError = "";     // why the last poll failed
   let cooldownUntil = 0;   // local deadline from the relay's cooldownLeftMs
   let draft = null;        // { server, left, bottom, right, top } previewed, not sent
@@ -80,9 +85,30 @@
   }
 
   // ---- relay ---------------------------------------------------------------
+  // pollFleet reads the other satellites' state, for the roster only.
+  async function pollFleet() {
+    const others = W.SATELLITES.filter(s => s.live && s !== sat);
+    const states = await Promise.all(others.map(async s => {
+      try {
+        const response = await fetch(`${W.relayHttp(s)}/control/state`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        return await response.json();
+      } catch (error) {
+        console.warn(`Watchtower: ${s.name}'s relay state unavailable`, error);
+        return null;
+      }
+    }));
+    fleet = new Map(others.map((s, i) => [s.id, states[i]]));
+    renderRoster();
+  }
+
   async function poll() {
     clearTimeout(pollTimer);
     if (!servers.size && Date.now() >= serversRetryAt) loadServers();
+    if (Date.now() >= fleetAt) {
+      fleetAt = Date.now() + FLEET_POLL_MS;
+      pollFleet();
+    }
     try {
       const response = await fetch(`${relay}/control/state`, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -304,18 +330,29 @@
           Object.assign(document.createElement("span"), { className: "r-where" }),
         );
         button.setAttribute("aria-pressed", String(s === sat));
+        if (s.live && s !== sat) button.addEventListener("click", () => aimAt(s));
         return button;
       }));
     }
     W.SATELLITES.forEach((s, index) => {
       const [, name, pill, spot] = roster.children[index].children;
-      const st = s === sat ? shownState() : "pad";
-      if (s === sat && state?.name) setText(name, state.name);
+      const known = s === sat ? state : fleet.get(s.id);
+      const st = s === sat ? shownState() : !s.live ? "pad" : known === undefined ? "connecting" : known === null ? "offline" : W.STATES[known.state] ? known.state : "connecting";
+      if (typeof known?.name === "string" && known.name) setText(name, known.name);
       pill.className = `state-pill is-${st}`;
       setText(pill, W.STATES[st]);
-      setText(spot, s === sat && state ? `S${state.area.server} · ${W.fmtCentre(state.area)}` : s.live ? "" : "Not implemented");
-      roster.children[index].setAttribute("aria-label", `${s.code} ${s.name}, ${W.STATES[st]}`);
+      const area = known?.area && Number.isInteger(known.area.server) ? known.area : null;
+      setText(spot, area ? `S${area.server} · ${W.fmtCentre(area)}` : s.live ? "" : "Not implemented");
+      roster.children[index].setAttribute("aria-label", `${s.code} ${s.name}, ${W.STATES[st]}${s.live && s !== sat ? ", open to aim it" : ""}`);
     });
+  }
+
+  // aimAt opens Mission Control for another satellite. The page reloads, so
+  // nothing of this one's preview carries over; the key stays if kept for the tab.
+  function aimAt(other) {
+    const url = new URL(location.href);
+    url.searchParams.set("sat", other.id);
+    location.assign(url);
   }
 
   function serverLabel(s) {
@@ -459,7 +496,8 @@
   function render(typed = null) {
     const st = shownState();
     setText($("aimTitle"), `Aim · ${sat.code} ${state?.name || sat.name}`);
-    setText($("fleetSummary"), `${state?.name || sat.name}: ${W.STATES[st]} · ${W.SATELLITES.length - 1} not implemented`);
+    const planned = W.SATELLITES.filter(s => !s.live).length;
+    setText($("fleetSummary"), `Aiming ${state?.name || sat.name}: ${W.STATES[st]}${planned ? ` · ${planned} not implemented` : ""}`);
     renderRoster();
     renderPicker();
     renderServer();

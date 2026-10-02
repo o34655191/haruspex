@@ -57,15 +57,14 @@
     <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
   </main>
 
-  <script src="heimdall-live.js?v=20261002-mvp"></script>
-  <script src="watchtower.js?v=20261002-mvp"></script>
+  <script src="heimdall-live.js?v=20261002-fleet"></script>
+  <script src="watchtower.js?v=20261002-fleet"></script>
   <script>
     (() => {
       "use strict";
       const W = window.Watchtower;
       const list = document.getElementById("satList");
       const count = document.getElementById("orbitCount");
-      const relay = W.relayHttp();
       const REFRESH_MS = 15000;
       const PATCHES = { sat01: "◈", sat02: "✦", sat03: "⌁", sat04: "◇" };
       // SMIL ignores prefers-reduced-motion, so park the orbiting dot by hand.
@@ -140,20 +139,27 @@
         return item;
       }
 
-      async function refresh() {
-        let health = null;
+      // healthOf reads one satellite's relay (/healthz); null = unreachable.
+      async function healthOf(sat) {
+        if (!sat.live) return null;
         try {
-          const response = await fetch(`${relay}/healthz`, { cache: "no-store" });
-          if (response.ok) health = await response.json();
+          const response = await fetch(`${W.relayHttp(sat)}/healthz`, { cache: "no-store" });
+          return response.ok ? await response.json() : null;
         } catch (error) {
-          console.warn("Watchtower: relay health unavailable", error);
+          console.warn(`Watchtower: ${sat.name}'s relay health unavailable`, error);
+          return null;
         }
-        const feeds = W.SATELLITES.map(sat => feedOf(sat, health));
-        const server = feeds.find(feed => feed.area)?.area.server || 472;
-        const layout = await W.loadLayout(server);
-        list.replaceChildren(...W.SATELLITES.map((sat, i) => card(sat, feeds[i], layout)));
-        const sentinel = feeds[0];
-        count.textContent = `${sentinel.name || W.SATELLITES[0].name}: ${W.STATES[sentinel.state]} · 3 planned`;
+      }
+
+      async function refresh() {
+        const healths = await Promise.all(W.SATELLITES.map(healthOf));
+        const feeds = W.SATELLITES.map((sat, i) => feedOf(sat, healths[i]));
+        // Each thumbnail shows the season structures of its own server.
+        const layouts = await Promise.all(feeds.map(feed => W.loadLayout(feed.area?.server || 472)));
+        list.replaceChildren(...W.SATELLITES.map((sat, i) => card(sat, feeds[i], layouts[i])));
+        const inOrbit = W.SATELLITES.map((sat, i) => (sat.live ? `${feeds[i].name || sat.name}: ${W.STATES[feeds[i].state]}` : "")).filter(Boolean);
+        const planned = W.SATELLITES.filter(sat => !sat.live).length;
+        count.textContent = [...inOrbit, ...(planned ? [`${planned} planned`] : [])].join(" · ");
         setTimeout(refresh, REFRESH_MS);
       }
       refresh();

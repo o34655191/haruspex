@@ -58,6 +58,14 @@ test("relayUrl uses the public relay unless a local dev page overrides it", () =
   assert.equal(live.relayUrl("http://localhost:8000/live-control.html?relay=wss://evil.example/ws"), relay);
 });
 
+test("relayUrl falls back to a satellite's own relay", () => {
+  const tycho = "wss://heimdall.tailc3e099.ts.net:8443/ws";
+  assert.equal(live.relayUrl("https://o34655191.github.io/haruspex/live-watch.html?sat=sat02", tycho), tycho);
+  assert.equal(live.relayUrl("https://o34655191.github.io/live-watch.html?relay=wss://evil.example/ws", tycho), tycho);
+  assert.equal(live.relayUrl("http://localhost:8000/live-watch.html?relay=wss://evil.example/ws", tycho), tycho);
+  assert.equal(live.relayUrl("http://localhost:8000/live-watch.html?relay=ws://127.0.0.1:8084/ws", tycho), "ws://127.0.0.1:8084/ws");
+});
+
 test("retryDelay doubles from one second, caps at thirty and keeps half as a floor", () => {
   assert.equal(live.retryDelay(0, () => 1), 1000);
   assert.equal(live.retryDelay(3, () => 1), 8000);

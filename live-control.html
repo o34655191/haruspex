@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex">
 <!-- This page handles the operator key: only its own scripts may run, and
      only the relay (or a local dev relay) may be contacted. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://heimdall.tailc3e099.ts.net http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://heimdall.tailc3e099.ts.net https://heimdall.tailc3e099.ts.net:8443 http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Watchtower — Mission Control</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
@@ -103,8 +103,8 @@
     <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
   </main>
 
-  <script src="heimdall-live.js?v=20261002-mvp"></script>
-  <script src="watchtower.js?v=20261002-mvp"></script>
-  <script src="live-control.js?v=20261002-servers"></script>
+  <script src="heimdall-live.js?v=20261002-fleet"></script>
+  <script src="watchtower.js?v=20261002-fleet"></script>
+  <script src="live-control.js?v=20261002-fleet"></script>
 </body>
 </html>

@@ -647,7 +647,7 @@
   requestAnimationFrame(frame);
   if (!sat.live) return;
 
-  const link = live.connect(live.relayUrl(location.href), {
+  const link = live.connect(W.feedUrl(sat), {
     onMessage: message => {
       // March IDs are snapshot-local. Base selection/highlights use stable UIDs.
       if (message.type === "snap" && selected?.kind === "march") selected = null;

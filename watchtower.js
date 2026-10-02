@@ -7,11 +7,12 @@
   const WARZONE = 1000;
   const live = window.HeimdallLive;
 
-  // Identities only. Sentinel is the one satellite in orbit so far.
+  // Identities and where each one's relay lives (one lwlive per satellite,
+  // each on its own Tailscale Funnel port). Sentinel and Tycho are in orbit.
   const SATELLITES = [
-    { id: "sat01", code: "SAT 01", name: "Sentinel", live: true,
+    { id: "sat01", code: "SAT 01", name: "Sentinel", live: true, relay: "wss://heimdall.tailc3e099.ts.net/ws",
       namesake: "After ESA's Sentinel fleet, Europe's eyes on Earth. Never blinks." },
-    { id: "sat02", code: "SAT 02", name: "Tycho", live: false,
+    { id: "sat02", code: "SAT 02", name: "Tycho", live: true, relay: "wss://heimdall.tailc3e099.ts.net:8443/ws",
       namesake: "After Tycho Brahe, who mapped the sky without a telescope. Also a fine place to get a Rocinante fixed." },
     { id: "sat03", code: "SAT 03", name: "Hayabusa", live: false,
       namesake: "After JAXA's falcon, which flew home with pieces of an asteroid. Settles for marches." },
@@ -31,10 +32,13 @@
 
   const STRUCTURE_COLORS = { city: "#f0b35a", stronghold: "#46d6b0", tradepost: "#b99cff", outpost: "#ff8fa3", capitol: "#ffd166" };
 
-  // relayHttp is the relay's https origin. It shares the live feed's host, so
-  // ?relay=ws://localhost:8082/ws (honoured on dev hosts only) moves both.
-  function relayHttp() {
-    const url = new URL(live.relayUrl(location.href));
+  // feedUrl is a satellite's live feed. ?relay=ws://localhost:8082/ws
+  // (honoured on dev hosts only) replaces every satellite's relay.
+  const feedUrl = sat => live.relayUrl(location.href, sat.relay);
+
+  // relayHttp is a satellite relay's https origin, the feed's host and port.
+  function relayHttp(sat) {
+    const url = new URL(feedUrl(sat));
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
     return url.origin;
   }
@@ -165,7 +169,7 @@
 
   window.Watchtower = {
     WARZONE, SATELLITES, STATES, TONES, STRUCTURE_COLORS,
-    relayHttp, clamp, byId, centre, fmtCentre, fmtArea, sameArea, clock, ago, boxAt,
+    feedUrl, relayHttp, clamp, byId, centre, fmtCentre, fmtArea, sameArea, clock, ago, boxAt,
     loadLayout, svgEl, rectAttrs, warzoneSvg, dimPathData, dimOutside, boxShape,
   };
 })();

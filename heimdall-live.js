@@ -30,20 +30,20 @@
   const scalar = value => typeof value === "string" || typeof value === "number" ? String(value) : "";
   const validPosition = value => Number.isInteger(value) && value >= 0 && value < MAX_POSITION;
 
-  // relayUrl picks the feed address. ?relay= is honoured only when the page
-  // itself runs on a local dev host and the relay is local too, so a shared
-  // link cannot point viewers (or Mission Control's key) at somebody else's
-  // server.
-  function relayUrl(pageUrl) {
+  // relayUrl picks the feed address: fallback (a satellite's own relay) unless
+  // ?relay= overrides it. The override is honoured only when the page itself
+  // runs on a local dev host and the relay is local too, so a shared link
+  // cannot point viewers (or Mission Control's key) at somebody else's server.
+  function relayUrl(pageUrl, fallback = DEFAULT_RELAY) {
     const page = new URL(pageUrl);
     const override = page.searchParams.get("relay");
-    if (!override || !DEV_HOSTS.has(page.hostname)) return DEFAULT_RELAY;
+    if (!override || !DEV_HOSTS.has(page.hostname)) return fallback;
     try {
       const target = new URL(override);
       const local = DEV_HOSTS.has(target.hostname);
-      return local && (target.protocol === "ws:" || target.protocol === "wss:") ? target.href : DEFAULT_RELAY;
+      return local && (target.protocol === "ws:" || target.protocol === "wss:") ? target.href : fallback;
     } catch {
-      return DEFAULT_RELAY;
+      return fallback;
     }
   }
 
