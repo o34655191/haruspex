@@ -136,7 +136,8 @@
     if (pending && pending.index >= 2 && next.state !== "moving" && sameSpot(next.area, pending.area)) {
       pending = null;
       draft = { ...next.area };
-      addLog(`${state.name || sat.name} is live over ${where(next.area)}`, "ok");
+      const name = state.name || sat.name;
+      addLog(next.state === "live" ? `${name} is live over ${where(next.area)}` : `${name} will watch ${where(next.area)} once it reconnects`, next.state === "live" ? "ok" : "");
     }
   }
 
@@ -190,8 +191,9 @@
   // wantLayout loads a server's season structures once; the picker redraws
   // when they arrive, unless the operator has picked another server since.
   function wantLayout(server) {
-    if (layout.server === server || layoutWanted === server) return;
-    layoutWanted = server;
+    if (layoutWanted === server) return;
+    layoutWanted = server; // a load for a server since left is then ignored
+    if (layout.server === server) return;
     W.loadLayout(server).then(loaded => {
       if (layoutWanted !== server) return;
       layout = { ...loaded, server };
