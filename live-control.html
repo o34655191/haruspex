@@ -11,7 +11,7 @@
 <title>Watchtower — Mission Control</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="watchtower.css?v=20261002-mvp">
+<link rel="stylesheet" href="watchtower.css?v=20261002-servers">
 </head>
 <body class="wt-page">
   <main class="wt-shell is-wide">
@@ -24,7 +24,7 @@
       <div>
         <div class="eyebrow">Watchtower · Operator</div>
         <h1>Mission Control</h1>
-        <p>Pick where the satellite looks, then apply. Box size, refresh rate and the server stay on AWS; this page only aims, and moving takes the operator key.</p>
+        <p>Pick the server and where the satellite looks, then apply. Box size and refresh rate stay on AWS; this page only aims, and moving takes the operator key.</p>
       </div>
       <span class="tailnet-badge" title="Moves need the key from /etc/lwlive/&lt;camera&gt;.control-key">&#9679; Operator key required</span>
     </header>
@@ -53,6 +53,7 @@
             <label for="server">Server</label>
             <select id="server" disabled></select>
             <span class="hint" id="serverHint"></span>
+            <div class="season-grid" id="seasonGrid" role="group" aria-label="Season map" hidden></div>
           </div>
           <div class="field">
             <span>Centre · in-game X, Y</span>
@@ -104,6 +105,6 @@
 
   <script src="heimdall-live.js?v=20261002-mvp"></script>
   <script src="watchtower.js?v=20261002-mvp"></script>
-  <script src="live-control.js?v=20261002-mvp"></script>
+  <script src="live-control.js?v=20261002-servers"></script>
 </body>
 </html>

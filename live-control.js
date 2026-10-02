@@ -1,7 +1,8 @@
 // Watchtower Mission Control: aim a satellite and send the move to its relay.
 // The relay is the source of truth: GET /control/state says where the box is
-// and what AWS allows; POST /control/move (with the operator key) moves it.
-// The page only previews until the relay confirms.
+// and what AWS allows, GET /control/servers which servers it may watch, and
+// POST /control/move (with the operator key) moves it. The page only previews
+// until the relay confirms.
 (() => {
   "use strict";
 
@@ -19,22 +20,35 @@
   ];
   const MOVE_STEPS = ["Sent to the relay", "Relay saved the new box", "Pictures from the new box"];
   const PRESETS = [["Capitol", 500, 500], ["NW", 250, 750], ["NE", 750, 750], ["SW", 250, 250], ["SE", 750, 250]];
+  const SERVERS_RETRY_MS = 60000;
+  // A season map is three warzones a side, read north-up; the middle has no server.
+  const SEASON_GRID = ["NW", "N", "NE", "W", "", "E", "SW", "S", "SE"];
+  const POSITION_NAMES = {
+    NW: "north-west", N: "north", NE: "north-east", W: "west", E: "east", SW: "south-west", S: "south", SE: "south-east",
+  };
+  const NO_LAYOUT = { server: 0, footprints: {}, structures: [] };
 
   const sat = W.SATELLITES.find(s => s.live);
   let state = null;        // the relay's last /control/state
   let stateError = "";     // why the last poll failed
   let cooldownUntil = 0;   // local deadline from the relay's cooldownLeftMs
-  let draft = null;        // { left, bottom, right, top } previewed, not sent
+  let draft = null;        // { server, left, bottom, right, top } previewed, not sent
   let pending = null;      // { index, area } while a move is on its way
   let picker = null;
-  let layout = { footprints: {}, structures: [] };
+  let layout = NO_LAYOUT;  // season structures of layout.server
+  let layoutWanted = 0;    // the server whose layout is loading
+  let servers = new Map(); // server id -> { server, map, position, zoneX, zoneY } from the relay
+  let serversNote = "";    // why there is no server list
+  let serversRetryAt = 0;
   let quip = 0;
   let log = [];
   let pollTimer = null;
 
   // ---- small helpers -------------------------------------------------------
   const cfg = () => ({ width: state.width, height: state.height, blockSize: state.blockSize, warzone: state.warzone });
-  const isSame = () => Boolean(state && draft) && W.sameArea(draft, state.area);
+  const sameSpot = (a, b) => Boolean(a && b) && a.server === b.server && W.sameArea(a, b);
+  const isSame = () => Boolean(state && draft) && sameSpot(draft, state.area);
+  const otherServer = () => Boolean(state && draft) && draft.server !== state.area.server;
   const cooldownLeft = () => Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
   const locked = () => !state || Boolean(pending);
   const fmtCountdown = seconds => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -68,6 +82,7 @@
   // ---- relay ---------------------------------------------------------------
   async function poll() {
     clearTimeout(pollTimer);
+    if (!servers.size && Date.now() >= serversRetryAt) loadServers();
     try {
       const response = await fetch(`${relay}/control/state`, { cache: "no-store" });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -81,17 +96,44 @@
     pollTimer = setTimeout(poll, pending || state?.state === "moving" ? POLL_MOVING_MS : POLL_MS);
   }
 
+  // parseServers keeps the well-formed entries of the relay's server list.
+  function parseServers(body) {
+    const list = Array.isArray(body?.servers) ? body.servers : [];
+    return list.filter(s => Number.isInteger(s?.server) && s.server > 0 && Number.isInteger(s.zoneX) && Number.isInteger(s.zoneY))
+      .map(s => ({
+        server: s.server, zoneX: s.zoneX, zoneY: s.zoneY,
+        map: Number.isInteger(s.map) && s.map > 0 ? s.map : 0,
+        position: Object.hasOwn(POSITION_NAMES, s.position) ? s.position : "",
+      }));
+  }
+
+  // loadServers asks the relay which servers a move may name. A relay that
+  // predates server moves has no list; the page then keeps the server fixed
+  // and asks again a minute later.
+  async function loadServers() {
+    serversRetryAt = Date.now() + SERVERS_RETRY_MS;
+    try {
+      const response = await fetch(`${relay}/control/servers`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const list = parseServers(await response.json());
+      if (!list.length) throw new Error("empty server list");
+      servers = new Map(list.map(s => [s.server, s]));
+      serversNote = "";
+    } catch (error) {
+      console.warn("Watchtower: server list unavailable", error);
+      serversNote = "This relay offers no server list yet, so the server stays as set on AWS.";
+    }
+    render();
+  }
+
   function applyState(next) {
     const first = !state;
     state = next;
     cooldownUntil = Date.now() + (next.cooldownLeftMs || 0);
     if (first || !draft) draft = { ...next.area };
-    if (first) {
-      addLog(next.movedAt ? `Watching ${where(next.area)} since ${W.clock(next.movedAt)}` : `Watching ${where(next.area)}`, "ok");
-      W.loadLayout(next.area.server).then(loaded => { layout = loaded; picker = null; render(); });
-    }
+    if (first) addLog(next.movedAt ? `Watching ${where(next.area)} since ${W.clock(next.movedAt)}` : `Watching ${where(next.area)}`, "ok");
     // A move is done once the relay reports pictures from the box we sent.
-    if (pending && pending.index >= 2 && next.state !== "moving" && W.sameArea(next.area, pending.area)) {
+    if (pending && pending.index >= 2 && next.state !== "moving" && sameSpot(next.area, pending.area)) {
       pending = null;
       draft = { ...next.area };
       addLog(`${state.name || sat.name} is live over ${where(next.area)}`, "ok");
@@ -101,19 +143,21 @@
   async function applyMove() {
     const key = $("opKey").value.trim();
     if (!key || !draft || locked()) return;
-    const area = { ...draft, server: state.area.server };
+    const area = { ...draft };
+    // An older relay refuses the server field; it can only stay put anyway.
+    const body = servers.size ? { left: area.left, bottom: area.bottom, server: area.server } : { left: area.left, bottom: area.bottom };
     pending = { index: 0, area };
     $("xyHint").textContent = "";
     render();
     let response;
-    let body = {};
+    let reply = {};
     try {
       response = await fetch(`${relay}/control/move`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({ left: area.left, bottom: area.bottom }),
+        body: JSON.stringify(body),
       });
-      body = await response.json().catch(() => ({}));
+      reply = await response.json().catch(() => ({}));
     } catch (error) {
       console.warn("Watchtower: move request failed", error);
       pending = null;
@@ -123,7 +167,7 @@
     }
     if (!response.ok) {
       pending = null;
-      const reason = body.error || `HTTP ${response.status}`;
+      const reason = reply.error || `HTTP ${response.status}`;
       addLog(`Move refused: ${reason}`, "bad");
       if (response.status === 401) {
         $("opKey").setAttribute("aria-invalid", "true");
@@ -137,32 +181,48 @@
     if ($("rememberKey").checked) storeKey(key);
     pending = { index: 2, area };
     addLog(`Move accepted · ${where(area)}`);
-    applyState(body);
+    applyState(reply);
     render();
     poll();
   }
 
   // ---- picker map ------------------------------------------------------------
+  // wantLayout loads a server's season structures once; the picker redraws
+  // when they arrive, unless the operator has picked another server since.
+  function wantLayout(server) {
+    if (layout.server === server || layoutWanted === server) return;
+    layoutWanted = server;
+    W.loadLayout(server).then(loaded => {
+      if (layoutWanted !== server) return;
+      layout = { ...loaded, server };
+      picker = null;
+      render();
+    });
+  }
+
   function buildPicker() {
-    const svg = W.warzoneSvg(layout, { detail: true, label: `Warzone S${state.area.server} with ${sat.name}'s box` });
+    wantLayout(draft.server);
+    const shown = layout.server === draft.server ? layout : NO_LAYOUT;
+    const svg = W.warzoneSvg(shown, { detail: true, label: `Warzone S${draft.server} with ${sat.name}'s box` });
     const dim = W.dimOutside(svg, [draft], 0.45);
     const overlays = W.svgEl("g", {}, svg);
     const box = W.boxShape(svg, draft, { tone: "preview", fill: 0.1, width: 2 });
     box.group.classList.add("drag-box");
     box.group.setAttribute("tabindex", "0");
     box.group.setAttribute("aria-label", `${sat.name} preview box. Arrow keys move it by ${state.blockSize} tiles, Shift by 100.`);
-    picker = { svg, dim, overlays, box };
+    picker = { svg, dim, overlays, box, server: draft.server };
     $("picker").replaceChildren(svg);
     wirePicker();
   }
 
   function renderPicker() {
     if (!state) return;
-    if (!picker) buildPicker();
+    if (!picker || picker.server !== draft.server) buildPicker();
     picker.dim.setAttribute("d", W.dimPathData([draft]));
     picker.overlays.replaceChildren();
     const same = isSame();
-    if (!same) W.boxShape(picker.overlays, state.area, { tone: shownState(), dashed: false, fill: 0.03, width: 1, text: "NOW" });
+    // The NOW box only belongs on the map of the server the satellite watches.
+    if (!same && !otherServer()) W.boxShape(picker.overlays, state.area, { tone: shownState(), dashed: false, fill: 0.03, width: 1, text: "NOW" });
     picker.box.place(draft);
     picker.box.caption.textContent = same ? `${sat.code} · ${state.name || sat.name}`.toUpperCase() : `${sat.code} · PREVIEW`;
     const tone = pending || state.state === "moving" ? W.TONES.moving : W.TONES.preview;
@@ -170,8 +230,8 @@
     picker.box.rect.setAttribute("fill", tone);
     picker.box.caption.setAttribute("fill", tone);
     $("picker").classList.toggle("is-locked", locked());
-    setText($("pickerTitle"), `S${state.area.server}`);
-    setText($("pickerSub"), `box ${W.fmtArea(draft)}`);
+    setText($("pickerTitle"), `S${draft.server}`);
+    setText($("pickerSub"), otherServer() ? `box ${W.fmtArea(draft)} · satellite now over S${state.area.server}` : `box ${W.fmtArea(draft)}`);
     setText($("pickerHelp"), `Box is ${state.width}×${state.height}, snaps to ${state.blockSize}-tile blocks and stays inside the warzone. Click to place, drag to adjust, arrow keys nudge.`);
   }
 
@@ -187,9 +247,16 @@
   // only, so any other way of moving the box clears it.
   function moveDraft(cx, cy, typed = null) {
     if (!state || locked()) return;
-    draft = W.boxAt(cx, cy, cfg());
+    draft = { server: draft.server, ...W.boxAt(cx, cy, cfg()) };
     if (!typed) $("xyHint").textContent = "";
     render(typed);
+  }
+
+  // chooseServer previews the same box on another server's warzone.
+  function chooseServer(server) {
+    if (!state || locked() || !servers.has(server) || server === draft.server) return;
+    draft = { ...draft, server };
+    render();
   }
 
   function wirePicker() {
@@ -249,11 +316,59 @@
     });
   }
 
+  function serverLabel(s) {
+    return s.position ? `S${s.server} · ${s.position}` : `S${s.server}`;
+  }
+
   function renderServer() {
     if (!state) return;
     const select = $("server");
-    if (select.value !== String(state.area.server)) select.replaceChildren(new Option(`S${state.area.server}`, String(state.area.server)));
-    setText($("serverHint"), `Zone (${state.zoneX}, ${state.zoneY}) · set on AWS`);
+    const current = state.area.server;
+    if (!servers.size) {
+      if (select.value !== String(current)) select.replaceChildren(new Option(`S${current}`, String(current)));
+      select.disabled = true;
+      setText($("serverHint"), `Zone (${state.zoneX}, ${state.zoneY}) · ${serversNote || "loading the server list…"}`);
+      renderSeasonGrid(null);
+      return;
+    }
+    if (select.options.length !== servers.size) {
+      select.replaceChildren(...[...servers.values()].map(s => new Option(serverLabel(s), String(s.server))));
+    }
+    select.value = String(draft.server);
+    select.disabled = locked();
+    const s = servers.get(draft.server);
+    const place = s?.map ? `Season map ${s.map}, ${POSITION_NAMES[s.position]} · ` : "";
+    const zone = s ? `zone (${s.zoneX}, ${s.zoneY})` : `zone (${state.zoneX}, ${state.zoneY})`;
+    const here = draft.server === current ? "satellite is here" : `satellite is over S${current}`;
+    setText($("serverHint"), `${place}${zone} · ${here}`);
+    renderSeasonGrid(s);
+  }
+
+  // renderSeasonGrid draws the chosen server's season map as a 3×3 of
+  // buttons, so a neighbour is one click away.
+  function renderSeasonGrid(entry) {
+    const grid = $("seasonGrid");
+    const mates = entry?.map ? [...servers.values()].filter(s => s.map === entry.map) : [];
+    grid.hidden = mates.length === 0;
+    if (!mates.length) return;
+    if (grid.dataset.map !== String(entry.map)) {
+      grid.dataset.map = String(entry.map);
+      grid.setAttribute("aria-label", `Season map ${entry.map}`);
+      grid.replaceChildren(...SEASON_GRID.map(position => {
+        const s = mates.find(m => m.position === position);
+        if (!s) return Object.assign(document.createElement("span"), { className: "sg-centre", title: "Centre of the season map: no server" });
+        const button = Object.assign(document.createElement("button"), { type: "button", textContent: `S${s.server}`, title: `S${s.server} · ${POSITION_NAMES[position]}` });
+        button.dataset.server = String(s.server);
+        button.addEventListener("click", () => chooseServer(s.server));
+        return button;
+      }));
+    }
+    for (const button of grid.querySelectorAll("button")) {
+      const id = Number(button.dataset.server);
+      button.setAttribute("aria-pressed", String(id === draft.server));
+      button.classList.toggle("is-now", id === state.area.server);
+      button.disabled = locked();
+    }
   }
 
   function renderCentre(typed) {
@@ -276,10 +391,10 @@
     const invalid = ["cx", "cy"].some(id => $(id).getAttribute("aria-invalid") === "true");
     const hasKey = $("opKey").value.trim() !== "";
     const confirm = $("confirm");
-    setText(confirm, pending ? "Applying…" : wait ? `Cooldown ${fmtCountdown(wait)}` : "Apply position");
+    setText(confirm, pending ? "Applying…" : wait ? `Cooldown ${fmtCountdown(wait)}` : otherServer() ? `Move to S${draft.server}` : "Apply position");
     confirm.disabled = locked() || same || wait > 0 || invalid || !hasKey || state?.control === false;
     $("reset").disabled = locked() || same;
-    setText($("previewChip"), pending ? "Applying position…" : same ? "Current position" : "Preview · not sent");
+    setText($("previewChip"), pending ? "Applying position…" : same ? "Current position" : otherServer() ? "Preview · other server" : "Preview · not sent");
     $("previewChip").classList.toggle("is-same", same && !pending);
     for (const button of $("presets").children) button.disabled = locked();
 
@@ -293,6 +408,7 @@
       : state.state === "down" || state.state === "stale" ? [`${name} is ${W.STATES[state.state].toLowerCase()}. A move is saved and used once it reconnects.`, "warn"]
       : wait ? [`Moved recently. The next move is allowed in ${fmtCountdown(wait)}.`, ""]
       : !hasKey ? ["Paste the operator key to move the satellite.", ""]
+      : otherServer() ? [`Applying moves ${name} from S${state.area.server} to S${draft.server}; the old picture is cleared.`, ""]
       : ["Dragging is a preview. Nothing moves until you apply.", ""];
     setText($("actionNote"), text);
     $("actionNote").className = `mc-note${tone ? ` ${tone}` : ""}`;
@@ -318,13 +434,13 @@
       ["Refresh", `every ${state.intervalMs} ms`],
       ["Requests per refresh", `${state.requests}`],
       ["Move cooldown", `${Math.round(state.cooldownMs / 1000)} s`],
-      ["Server", `S${state.area.server}`],
+      ["Server now", `S${state.area.server} · zone ${state.zoneX}, ${state.zoneY}`],
     ];
     $("cfg").replaceChildren(...rows.flatMap(([term, value]) => [
       Object.assign(document.createElement("dt"), { textContent: term }),
       Object.assign(document.createElement("dd"), { textContent: value }),
     ]));
-    setText($("cfgNote"), `Change these in /etc/lwlive/${state.camera}.viewport.json on AWS, then restart lwlive@${state.camera}.`);
+    setText($("cfgNote"), `Change these in /etc/lwlive/${state.camera}.viewport.json on AWS, then restart lwlive@${state.camera}. The server is picked here.`);
   }
 
   function renderLog() {
@@ -374,6 +490,7 @@
     button.addEventListener("click", () => moveDraft(x, y));
     return button;
   }));
+  $("server").addEventListener("change", event => chooseServer(Number(event.target.value)));
   $("cx").addEventListener("input", onCentreInput);
   $("cy").addEventListener("input", onCentreInput);
   for (const id of ["cx", "cy"]) {
