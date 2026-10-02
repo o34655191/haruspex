@@ -34,7 +34,7 @@
   let fitted = false;
   let lastStats = 0;
 
-  const playerLabel = player => player?.name || player?.uid || "Unknown player";
+  const playerLabel = player => player?.name || "Unknown player";
   const coords = pos => { const p = F.unpack(pos, feed.mapWidth); return `${p.x}, ${p.y}`; };
   function markHighlight(player, p, radius) {
     if (!player || !highlighted.has(player.uid)) return;
@@ -66,11 +66,11 @@
     const results = $("searchResults");
     results.replaceChildren();
     if (!query) return;
-    const players = feed.players.filter(p => p && `${p.name} ${p.uid} ${p.abbr}`.toLocaleLowerCase().includes(query));
+    const players = feed.players.filter(p => p && `${p.name} ${p.abbr}`.toLocaleLowerCase().includes(query));
     for (const player of players.slice(0, 30)) {
       const row = document.createElement("div"); row.className = "tool-row";
       const button = document.createElement("button"); button.type = "button";
-      button.textContent = `${playerLabel(player)} · ${player.abbr || "No alliance"} · S${player.server || "?"} · ${player.uid}`;
+      button.textContent = `${playerLabel(player)} · ${player.abbr || "No alliance"} · S${player.server || "?"}`;
       button.setAttribute("aria-pressed", String(highlighted.has(player.uid)));
       button.onclick = () => toggleHighlight(player);
       const inspect = document.createElement("button"); inspect.type = "button"; inspect.textContent = "Details";
@@ -108,7 +108,6 @@
     const { entity, player, title } = selectionEntity();
     $("detailTitle").textContent = `${title} · ${playerLabel(player)}`;
     const rows = [["Player", playerLabel(player)]];
-    if (player?.uid) rows.push(["UID", player.uid]);
     if (player?.abbr) rows.push(["Alliance", player.abbr]);
     if (player?.server) rows.push(["Home server", player.server]);
     const t = F.dataNow(feed, Date.now());
@@ -120,7 +119,7 @@
       rows.push(["Shield", left ? F.duration(left) + " remaining" : "No active timed shield"]);
     } else {
       const p = F.marchPoint(entity, t, feed.mapWidth);
-      rows.push(["Current location", `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`], ["From", coords(entity.start)], ["Destination", coords(entity.target)], ["March type", entity.type], ["Target type", entity.targetKind]);
+      rows.push(["Current location", `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`], ["From", coords(entity.start)], ["Destination", coords(entity.target)]);
       if (entity.speed > 0) rows.push(["Travel speed", `${entity.speed} tiles/s`]);
       const state = F.marchState(entity, t, feed.mapWidth);
       const left = F.duration((entity.endMs - t) / 1000);
@@ -129,7 +128,6 @@
         : state === "expired" ? "Timer ended · awaiting feed update" : `${left} to arrival`;
       if (entity.endMs > 0) rows.push(["Activity", movement]);
       if (state === "rally-waiting") note = "Held at origin until the feed reports travel. Rally state is inferred from timing; participant counts are not supplied.";
-      if (entity.team) rows.push(["Relay team ID", entity.team]);
       if (F.isTransport(entity)) note = "Transport detected. This feed does not distinguish truck from train or supply a separate escort roster.";
     }
     $("detailFields").replaceChildren(...rows.flatMap(([label, value]) => {
