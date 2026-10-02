@@ -100,6 +100,7 @@ a.sat-card:hover,a.sat-card:focus-visible{border-color:rgba(167,182,255,.7);back
 .k-foreign{border:1px solid var(--enemy);background:rgba(255,93,93,.3)}
 .k-none{border:1px solid #8a96a3;background:rgba(138,150,163,.25)}
 .k-march{background:var(--mine);clip-path:polygon(0 0,100% 50%,0 100%)}
+.k-shield{border:1px solid #7ce1ff;border-radius:50%;background:radial-gradient(circle at 30% 25%,#cdf6ff88,#5cbfff18 65%,#7ce1ff66)}
 .k-sat{border:1px dashed var(--st-live)}
 .stage-zoom{position:absolute;z-index:3;left:12px;bottom:12px;display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(40,50,63,.9);border-radius:9px;background:rgba(8,11,16,.88)}
 .stage-zoom button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;background:transparent;color:var(--ink-dim);font:22px/1 var(--mono);cursor:pointer}

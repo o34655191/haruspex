@@ -72,6 +72,11 @@ remaining is added beside shielded bases at readable zoom. Expiry removes that
 text. A new base event replaces the previous expiry; older events without it
 clear the shield rather than retaining stale state.
 
+Per the follow-up request, active shields also draw a translucent blue bubble
+at every zoom, with a curved reflection and blue rim. The alliance-colored base
+remains visible inside it. White player-highlight rings sit outside the bubble.
+The bubble and countdown disappear together when the shield expires or clears.
+
 Unlike movement interpolation, shields deliberately do not use `feed.clockOffset`:
 relay `hub.go` stamps snapshots with `h.dataT` (last observation time), which can
 be stale. Using it as a current server time would extend shields after reconnect.

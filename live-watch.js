@@ -121,7 +121,7 @@
     } else {
       const p = F.marchPoint(entity, t, feed.mapWidth);
       rows.push(["Current location", `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`], ["From", coords(entity.start)], ["Destination", coords(entity.target)], ["March type", entity.type], ["Target type", entity.targetKind]);
-      if (entity.speed > 0) rows.push(["Speed", `${entity.speed} tiles/s`]);
+      if (entity.speed > 0) rows.push(["Travel speed", `${entity.speed} tiles/s`]);
       const state = F.marchState(entity, t, feed.mapWidth);
       const left = F.duration((entity.endMs - t) / 1000);
       const movement = state === "rally-waiting" ? `Rally countdown · ${left}`
@@ -334,19 +334,31 @@
     for (const base of feed.bases.values()) {
       const { x, y } = F.unpack(base.pos, feed.mapWidth);
       const p = toScreen(x, y, s);
-      if (offscreen(p, s, 10)) continue;
+      if (offscreen(p, s, Math.max(10, size))) continue;
       visible++;
       const player = feed.players[base.player];
       const color = colorFor(player, home);
       hits.push({ x: p.x, y: p.y, radius: Math.max(22, size / 2), selection: { kind: "base", uid: player?.uid } });
+      // Current wall clock, as in watcher: an old observation cannot renew a shield.
+      const remaining = F.shieldRemaining(base.shieldEnd, Date.now());
+      const bubbleRadius = Math.max(5, size * 0.75 + 3);
+      if (remaining) {
+        ctx.save();
+        const bubble = ctx.createRadialGradient(p.x - bubbleRadius * 0.3, p.y - bubbleRadius * 0.35, 0, p.x, p.y, bubbleRadius);
+        bubble.addColorStop(0, "rgba(205,246,255,.23)");
+        bubble.addColorStop(0.65, "rgba(92,191,255,.08)");
+        bubble.addColorStop(1, "rgba(124,225,255,.3)");
+        ctx.fillStyle = bubble; ctx.strokeStyle = "rgba(124,225,255,.85)"; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(p.x,p.y,bubbleRadius,0,Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "rgba(225,250,255,.85)";
+        ctx.beginPath(); ctx.arc(p.x,p.y,bubbleRadius*0.8,Math.PI*1.12,Math.PI*1.6); ctx.stroke();
+        ctx.restore();
+      }
       ctx.fillStyle = hexA(color, 0.35);
       ctx.strokeStyle = color;
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
       ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
-      markHighlight(player, p, size * 0.75 + 5);
-      // Relay t is last observation time, NOT a server clock sample. A stale
-      // snapshot must not extend a shield. Match watcher's current UTC clock.
-      const remaining = F.shieldRemaining(base.shieldEnd, Date.now());
+      markHighlight(player, p, remaining ? bubbleRadius + 4 : size * 0.75 + 5);
       if (remaining && view.zoom > 2) {
         ctx.fillStyle = "#b7ecff";
         ctx.fillText(F.duration(remaining), p.x + size / 2 + 3, p.y + 12);
