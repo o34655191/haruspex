@@ -18,7 +18,11 @@
   const NOTICE_WINDOW_MS = 10 * 60000;
   const REVIVE_AFTER_MS = 60000; // a tab back from sleep reconnects if this quiet
   const WHOLE = { left: 0, bottom: 0, right: W.WARZONE, top: W.WARZONE };
-  const SIDE_COLORS = { home: "#43c6f0", foreign: "#ff5d5d", none: "#8a96a3" };
+  const overrides = new Map();
+  const highlighted = new Map(); // UID -> last known label; survives snapshot reindexing.
+  let selected = null;
+  let hits = [];
+  const colorFor = (player, home) => F.playerColor(player, home, $("colorMode").value, overrides);
 
   const feed = F.createFeed();
   const view = { x: 500, y: 500, zoom: 1 };
@@ -29,6 +33,113 @@
   let glide = null;
   let fitted = false;
   let lastStats = 0;
+
+  const playerLabel = player => player?.name || player?.uid || "Unknown player";
+  const coords = pos => { const p = F.unpack(pos, feed.mapWidth); return `${p.x}, ${p.y}`; };
+  function markHighlight(player, p, radius) {
+    if (!player || !highlighted.has(player.uid)) return;
+    ctx.save();
+    ctx.lineWidth = 4; ctx.strokeStyle = "#080b10";
+    ctx.beginPath(); ctx.arc(p.x, p.y, radius, 0, Math.PI * 2); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = "#ffffff"; ctx.stroke();
+    ctx.restore();
+  }
+  function toggleHighlight(player) {
+    if (!player) return;
+    if (highlighted.has(player.uid)) highlighted.delete(player.uid);
+    else highlighted.set(player.uid, playerLabel(player));
+    renderHighlights(); renderSearch(); renderDetail();
+  }
+  function renderHighlights() {
+    $("highlightCount").textContent = highlighted.size ? `(${highlighted.size} highlighted)` : "";
+    $("clearHighlights").hidden = !highlighted.size;
+    $("playerHighlights").replaceChildren(...[...highlighted].map(([uid, label]) => {
+      const button = document.createElement("button");
+      button.type = "button"; button.textContent = `${label} ×`;
+      button.setAttribute("aria-label", `Remove highlight for ${label}`);
+      button.onclick = () => { highlighted.delete(uid); renderHighlights(); renderSearch(); renderDetail(); };
+      return button;
+    }));
+  }
+  function renderSearch() {
+    const query = $("playerSearch").value.trim().toLocaleLowerCase();
+    const results = $("searchResults");
+    results.replaceChildren();
+    if (!query) return;
+    const players = feed.players.filter(p => p && `${p.name} ${p.uid} ${p.abbr}`.toLocaleLowerCase().includes(query));
+    for (const player of players.slice(0, 30)) {
+      const row = document.createElement("div"); row.className = "tool-row";
+      const button = document.createElement("button"); button.type = "button";
+      button.textContent = `${playerLabel(player)} · ${player.abbr || "No alliance"} · S${player.server || "?"} · ${player.uid}`;
+      button.setAttribute("aria-pressed", String(highlighted.has(player.uid)));
+      button.onclick = () => toggleHighlight(player);
+      const inspect = document.createElement("button"); inspect.type = "button"; inspect.textContent = "Details";
+      inspect.setAttribute("aria-label", `Inspect ${playerLabel(player)}`);
+      inspect.onclick = () => {
+        selected = { kind: "base", uid: player.uid };
+        renderDetail(); $("closeDetail").focus();
+      };
+      row.append(button, inspect); results.append(row);
+    }
+    const note = document.createElement("p");
+    note.textContent = players.length ? `${players.length} matches${players.length > 30 ? " · first 30 shown; refine your search" : ""}. Tap a name to toggle its highlight.` : "No matching players in this feed.";
+    results.append(note);
+  }
+  function renderAlliances() {
+    const select = $("allianceChoice"), previous = select.value;
+    const alliances = new Map();
+    for (const p of feed.players) if (p?.abbr) alliances.set(F.allianceKey(p), `${p.abbr} · S${p.server || "?"}`);
+    select.replaceChildren(new Option("Choose alliance", ""), ...[...alliances].sort((a,b) => a[1].localeCompare(b[1])).map(([key, label]) => new Option(label + (overrides.has(key) ? " · custom" : ""), key)));
+    if (alliances.has(previous)) select.value = previous;
+    $("applyColor").disabled = $("resetColor").disabled = !select.value;
+  }
+  function selectionEntity() {
+    if (!selected) return null;
+    if (selected.kind === "base") {
+      const player = feed.players.find(p => p?.uid === selected.uid);
+      return { player, entity: player && feed.bases.get(player.index), title: "Player base" };
+    }
+    const entity = feed.marches.get(selected.id);
+    return { entity, player: entity && feed.players[entity.player], title: entity ? F.entityKind(entity) : "March" };
+  }
+  function renderDetail() {
+    const detail = $("entityDetail"); detail.hidden = !selected;
+    if (!selected) return;
+    const { entity, player, title } = selectionEntity();
+    $("detailTitle").textContent = `${title} · ${playerLabel(player)}`;
+    const rows = [["Player", playerLabel(player)]];
+    if (player?.uid) rows.push(["UID", player.uid]);
+    if (player?.abbr) rows.push(["Alliance", player.abbr]);
+    if (player?.server) rows.push(["Home server", player.server]);
+    const t = F.dataNow(feed, Date.now());
+    let note = "";
+    if (!entity) note = "This entity is no longer present in the current feed.";
+    else if (selected.kind === "base") {
+      rows.push(["Coordinates", coords(entity.pos)]);
+      const left = F.shieldRemaining(entity.shieldEnd, Date.now());
+      rows.push(["Shield", left ? F.duration(left) + " remaining" : "No active timed shield"]);
+    } else {
+      const p = F.marchPoint(entity, t, feed.mapWidth);
+      rows.push(["Current location", `${p.x.toFixed(1)}, ${p.y.toFixed(1)}`], ["From", coords(entity.start)], ["Destination", coords(entity.target)], ["March type", entity.type], ["Target type", entity.targetKind]);
+      if (entity.speed > 0) rows.push(["Speed", `${entity.speed} tiles/s`]);
+      const state = F.marchState(entity, t, feed.mapWidth);
+      const left = F.duration((entity.endMs - t) / 1000);
+      const movement = state === "rally-waiting" ? `Rally countdown · ${left}`
+        : state === "gathering" ? `Gathering · ${left} remaining`
+        : state === "expired" ? "Timer ended · awaiting feed update" : `${left} to arrival`;
+      if (entity.endMs > 0) rows.push(["Activity", movement]);
+      if (state === "rally-waiting") note = "Held at origin until the feed reports travel. Rally state is inferred from timing; participant counts are not supplied.";
+      if (entity.team) rows.push(["Relay team ID", entity.team]);
+      if (F.isTransport(entity)) note = "Transport detected. This feed does not distinguish truck from train or supply a separate escort roster.";
+    }
+    $("detailFields").replaceChildren(...rows.flatMap(([label, value]) => {
+      const dt = document.createElement("dt"), dd = document.createElement("dd");
+      dt.textContent = label; dd.textContent = value; return [dt, dd];
+    }));
+    $("detailNote").textContent = note;
+    $("highlightSelected").disabled = !player;
+    $("highlightSelected").textContent = highlighted.has(player?.uid) ? "Remove player highlight" : "Highlight player";
+  }
 
   // ---- view --------------------------------------------------------------
   function screenSize() {
@@ -120,12 +231,7 @@
     for (const st of layout.structures) {
       const p = toScreen(st.x, st.y, s);
       if (st.kind === "capitol") {
-        const m = W.clamp(view.zoom * 3.2, 4, 14);
-        ctx.fillStyle = "rgba(255,209,102,.2)";
-        ctx.strokeStyle = "#ffd166";
-        ctx.beginPath(); ctx.moveTo(p.x, p.y - m); ctx.lineTo(p.x + m, p.y); ctx.lineTo(p.x, p.y + m); ctx.lineTo(p.x - m, p.y); ctx.closePath();
-        ctx.fill(); ctx.stroke();
-        continue;
+        continue; // drawn once by the capture-verified capitol overlay below
       }
       const print = layout.footprints[st.kind];
       if (!print?.zone) continue;
@@ -142,6 +248,45 @@
       ctx.fillRect(p.x - coreHalf, p.y - coreHalf, coreHalf * 2, coreHalf * 2);
       ctx.strokeRect(p.x - coreHalf, p.y - coreHalf, coreHalf * 2, coreHalf * 2);
     }
+  }
+
+  // Restored from heimdall.js CAPITOL/drawCapitol, including the verified
+  // centre (500,499), rather than the season layout's approximate centre.
+  function drawCapitol(s) {
+    const x = 500, y = 499;
+    const boundary = [[-25,50],[25,50],[25,25],[50,25],[50,-25],[25,-25],
+      [25,-50],[-25,-50],[-25,-25],[-50,-25],[-50,25],[-25,25]];
+    ctx.save(); ctx.beginPath();
+    boundary.forEach(([dx,dy], index) => {
+      const p = toScreen(x + dx, y + dy, s);
+      if (index) ctx.lineTo(p.x,p.y); else ctx.moveTo(p.x,p.y);
+    });
+    ctx.closePath(); ctx.fillStyle = "rgba(150,160,172,.13)"; ctx.fill();
+    ctx.strokeStyle = "rgba(124,225,255,.76)"; ctx.lineWidth = 1.35;
+    ctx.setLineDash([6,4]); ctx.stroke(); ctx.setLineDash([]);
+    const r = screenRect({left:x-10.5,right:x+10.5,bottom:y-10.5,top:y+10.5},s);
+    ctx.fillStyle = "rgba(255,69,91,.13)"; ctx.fillRect(r.x,r.y,r.w,r.h);
+    ctx.strokeStyle = "rgba(255,97,116,.88)"; ctx.strokeRect(r.x,r.y,r.w,r.h);
+    if (view.zoom >= 3.5) {
+      ctx.strokeStyle = "rgba(255,97,116,.16)"; ctx.lineWidth = 1;
+      for (let i=1;i<21;i++) {
+        line(r.x+i*view.zoom,r.y,r.x+i*view.zoom,r.y+r.h);
+        line(r.x,r.y+i*view.zoom,r.x+r.w,r.y+i*view.zoom);
+      }
+    }
+    const p = toScreen(x,y,s), m = W.clamp(view.zoom*3.2,4,14);
+    ctx.fillStyle = "rgba(255,209,102,.2)"; ctx.strokeStyle = "#ffd166";
+    ctx.beginPath(); ctx.moveTo(p.x,p.y-m); ctx.lineTo(p.x+m,p.y); ctx.lineTo(p.x,p.y+m); ctx.lineTo(p.x-m,p.y); ctx.closePath(); ctx.fill(); ctx.stroke();
+    for (const [dx,dy] of [[-9,9],[9,9],[-9,-9],[9,-9]]) {
+      const c = toScreen(x+dx,y+dy,s);
+      ctx.beginPath(); ctx.arc(c.x,c.y,W.clamp(view.zoom*1.35,2,6),0,Math.PI*2); ctx.fill(); ctx.stroke();
+    }
+    if (view.zoom >= 1.35) {
+      const label = toScreen(x,y+39,s);
+      ctx.font = "10px ui-monospace, Consolas, monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = "#adbdce"; ctx.fillText("CAPITOL AREA",label.x,label.y);
+    }
+    ctx.restore();
   }
 
   // drawSatellite dims everything outside the box and outlines it in the
@@ -192,14 +337,19 @@
       if (offscreen(p, s, 10)) continue;
       visible++;
       const player = feed.players[base.player];
-      const color = SIDE_COLORS[F.sideOf(player, home)];
+      const color = colorFor(player, home);
+      hits.push({ x: p.x, y: p.y, radius: Math.max(22, size / 2), selection: { kind: "base", uid: player?.uid } });
       ctx.fillStyle = hexA(color, 0.35);
       ctx.strokeStyle = color;
       ctx.fillRect(p.x - size / 2, p.y - size / 2, size, size);
       ctx.strokeRect(p.x - size / 2, p.y - size / 2, size, size);
-      if (base.shieldEnd * 1000 > t && view.zoom > 2) {
-        ctx.strokeStyle = "rgba(124,225,255,.9)";
-        ctx.beginPath(); ctx.arc(p.x, p.y, size * 0.75 + 3, 0, Math.PI * 2); ctx.stroke();
+      markHighlight(player, p, size * 0.75 + 5);
+      // Relay t is last observation time, NOT a server clock sample. A stale
+      // snapshot must not extend a shield. Match watcher's current UTC clock.
+      const remaining = F.shieldRemaining(base.shieldEnd, Date.now());
+      if (remaining && view.zoom > 2) {
+        ctx.fillStyle = "#b7ecff";
+        ctx.fillText(F.duration(remaining), p.x + size / 2 + 3, p.y + 12);
       }
       if (ui.showLabels.checked && player?.abbr && view.zoom > 2.2) {
         ctx.fillStyle = "rgba(232,238,245,.72)";
@@ -211,29 +361,50 @@
 
   function drawMarches(s, t, home) {
     let moving = 0;
+    let gathering = 0, waiting = 0;
     for (const march of feed.marches.values()) {
-      if (!(march.endMs > t)) continue; // arrived (or no end time): nothing to draw
-      moving++;
+      const activity = F.marchState(march, t, feed.mapWidth);
+      if (activity === "expired") continue;
+      if (activity === "gathering") gathering++;
+      else if (activity === "rally-waiting") waiting++;
+      else moving++;
       const at = F.marchPoint(march, t, feed.mapWidth);
       const p = toScreen(at.x, at.y, s);
       if (offscreen(p, s, 60)) continue;
       const target = toScreen(at.tx, at.ty, s);
-      const color = SIDE_COLORS[F.sideOf(feed.players[march.player], home)];
-      if (ui.showRoutes.checked) {
+      const player = feed.players[march.player];
+      const color = colorFor(player, home);
+      hits.push({ x: p.x, y: p.y, radius: 22, selection: { kind: "march", id: march.id } });
+      markHighlight(player, p, 12);
+      if (ui.showRoutes.checked && activity === "moving") {
         ctx.strokeStyle = hexA(color, 0.28);
         ctx.lineWidth = 1;
         line(p.x, p.y, target.x, target.y);
       }
       ctx.save();
       ctx.translate(p.x, p.y);
-      ctx.rotate(Math.atan2(target.y - p.y, target.x - p.x));
+      if (activity === "moving") ctx.rotate(Math.atan2(target.y - p.y, target.x - p.x));
       ctx.fillStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur = 8;
-      ctx.beginPath(); ctx.moveTo(6.75, 0); ctx.lineTo(-4.5, 4.5); ctx.lineTo(-4.5, -4.5); ctx.closePath(); ctx.fill();
+      if (activity === "rally-waiting") {
+        // Upright rally flag; countdown is not a slow-moving arrow.
+        ctx.shadowBlur = 0; ctx.strokeStyle = color; ctx.lineWidth = 2;
+        line(-3,7,-3,-8); ctx.beginPath(); ctx.moveTo(-3,-8); ctx.lineTo(8,-4); ctx.lineTo(-3,0); ctx.closePath(); ctx.fill();
+      } else if (activity === "gathering") {
+        // Crossed pickaxe, independent of alliance color.
+        ctx.shadowBlur = 0; ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+        line(-5,6,4,-5); ctx.beginPath(); ctx.moveTo(-6,-4); ctx.quadraticCurveTo(1,-9,7,1); ctx.stroke();
+      } else if (F.isTransport(march)) {
+        ctx.fillRect(-7, -4, 10, 8); ctx.fillRect(4, -3, 4, 6);
+        ctx.shadowBlur = 0; ctx.fillStyle = "#fff";
+        for (const x of [-4, 5]) for (const y of [-5, 5]) { ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
+      } else {
+        ctx.beginPath(); ctx.moveTo(6.75, 0); ctx.lineTo(-4.5, 4.5); ctx.lineTo(-4.5, -4.5); ctx.closePath(); ctx.fill();
+      }
       ctx.restore();
     }
-    return moving;
+    return { moving, gathering, waiting };
   }
 
   // ---- state + chrome ----------------------------------------------------
@@ -370,33 +541,55 @@
     const home = camera?.area?.server || 0;
     drawGrid(s);
     drawStructures(s);
+    drawCapitol(s);
     drawSatellite(s, now, state);
     ctx.globalAlpha = state === "down" || state === "offline" ? 0.4 : 1;
+    hits = [];
     const visible = drawBases(s, t, home);
     const moving = drawMarches(s, t, home);
     ctx.globalAlpha = 1;
     if (now - lastStats > 250) {
       lastStats = now;
       $("baseCount").textContent = visible.toLocaleString();
-      $("marchCount").textContent = moving.toLocaleString();
+      $("marchCount").textContent = moving.moving.toLocaleString();
+      $("activityCount").textContent = `${moving.gathering} gathering · ${moving.waiting} rallies forming`;
+      renderDetail();
     }
   }
 
   let drag = null;
   canvas.addEventListener("pointerdown", event => {
-    drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+    if (drag || event.isPrimary === false) return;
+    drag = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: view.x, vy: view.y, moved: false };
     glide = null;
     canvas.setPointerCapture(event.pointerId);
     canvas.classList.add("dragging");
   });
   canvas.addEventListener("pointermove", event => {
-    if (!drag) return;
+    if (!drag || drag.id !== event.pointerId) return;
+    if (Math.hypot(event.clientX - drag.x, event.clientY - drag.y) > 6) drag.moved = true;
+    if (!drag.moved) return;
     view.x = drag.vx - (event.clientX - drag.x) / view.zoom;
     view.y = drag.vy + (event.clientY - drag.y) / view.zoom;
   });
-  const endDrag = () => { drag = null; canvas.classList.remove("dragging"); };
+  const endDrag = event => {
+    if (!drag || drag.id !== event.pointerId) return;
+    if (event.type === "pointerup" && !drag.moved) {
+      const rect = canvas.getBoundingClientRect();
+      const x = event.clientX - rect.left, y = event.clientY - rect.top;
+      let closest = null, distance = Infinity;
+      for (const hit of hits) {
+        const d = Math.hypot(hit.x - x, hit.y - y);
+        if (d <= hit.radius && d < distance) { closest = hit; distance = d; }
+      }
+      selected = closest?.selection || null; renderDetail();
+      if (selected) $("closeDetail").focus({ preventScroll: true });
+    }
+    drag = null; canvas.classList.remove("dragging");
+  };
   canvas.addEventListener("pointerup", endDrag);
   canvas.addEventListener("pointercancel", endDrag);
+  canvas.addEventListener("lostpointercapture", endDrag);
   canvas.addEventListener("wheel", event => {
     event.preventDefault();
     zoomAt(event.offsetX, event.offsetY, view.zoom * Math.exp(-event.deltaY * 0.0015));
@@ -417,6 +610,27 @@
   $("resetView").addEventListener("click", () => glideTo(fitView(camera?.area || WHOLE)));
   ui.follow.addEventListener("change", () => { if (ui.follow.checked && camera?.area) glideTo(fitView(camera.area)); });
   $("noticeClose").addEventListener("click", () => { $("orbitNotice").hidden = true; });
+  const closeDetail = () => { selected = null; renderDetail(); canvas.focus({ preventScroll: true }); };
+  $("closeDetail").addEventListener("click", closeDetail);
+  document.addEventListener("keydown", event => { if (event.key === "Escape" && selected) closeDetail(); });
+  $("highlightSelected").addEventListener("click", () => toggleHighlight(selectionEntity()?.player));
+  $("playerSearch").addEventListener("input", renderSearch);
+  $("clearHighlights").addEventListener("click", () => { highlighted.clear(); renderHighlights(); renderSearch(); renderDetail(); });
+  $("colorMode").addEventListener("change", () => {
+    $("colorLegend").textContent = $("colorMode").value === "domestic" ? "Domestic: alliance colors · Foreign: red" : "Alliance colors";
+  });
+  $("allianceChoice").addEventListener("change", () => {
+    const key = $("allianceChoice").value;
+    $("applyColor").disabled = $("resetColor").disabled = !key;
+    if (key) $("allianceColor").value = overrides.get(key) || F.allianceColor(key);
+  });
+  $("applyColor").addEventListener("click", () => {
+    const key = $("allianceChoice").value;
+    if (key) overrides.set(key, $("allianceColor").value);
+    renderAlliances();
+  });
+  $("resetColor").addEventListener("click", () => { overrides.delete($("allianceChoice").value); renderAlliances(); });
+  renderAlliances();
 
   Object.assign(view, fitView(WHOLE));
   renderChrome();
@@ -425,7 +639,10 @@
 
   const link = live.connect(live.relayUrl(location.href), {
     onMessage: message => {
+      // March IDs are snapshot-local. Base selection/highlights use stable UIDs.
+      if (message.type === "snap" && selected?.kind === "march") selected = null;
       F.applyMessage(feed, message, Date.now());
+      if (message.type === "snap" || message.players.length) { renderAlliances(); renderSearch(); }
       if (message.type === "status") onStatus();
       else if (message.type === "snap") renderChrome();
     },
