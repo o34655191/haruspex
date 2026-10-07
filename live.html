@@ -57,8 +57,8 @@
     <footer class="wt-foot">Heimdall remembers. Watchtower watches.</footer>
   </main>
 
-  <script src="heimdall-live.js?v=20261002-fleet"></script>
-  <script src="watchtower.js?v=20261002-fleet"></script>
+  <script src="heimdall-live.js?v=20261002-fleet2"></script>
+  <script src="watchtower.js?v=20261002-fleet2"></script>
   <script>
     (() => {
       "use strict";
@@ -143,8 +143,7 @@
       async function healthOf(sat) {
         if (!sat.live) return null;
         try {
-          const response = await fetch(`${W.relayHttp(sat)}/healthz`, { cache: "no-store" });
-          return response.ok ? await response.json() : null;
+          return await W.fetchJson(`${W.relayHttp(sat)}/healthz`);
         } catch (error) {
           console.warn(`Watchtower: ${sat.name}'s relay health unavailable`, error);
           return null;

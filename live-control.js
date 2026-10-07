@@ -90,9 +90,7 @@
     const others = W.SATELLITES.filter(s => s.live && s !== sat);
     const states = await Promise.all(others.map(async s => {
       try {
-        const response = await fetch(`${W.relayHttp(s)}/control/state`, { cache: "no-store" });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        return await response.json();
+        return await W.fetchJson(`${W.relayHttp(s)}/control/state`);
       } catch (error) {
         console.warn(`Watchtower: ${s.name}'s relay state unavailable`, error);
         return null;
@@ -110,9 +108,7 @@
       pollFleet();
     }
     try {
-      const response = await fetch(`${relay}/control/state`, { cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      applyState(await response.json());
+      applyState(await W.fetchJson(`${relay}/control/state`));
       stateError = "";
     } catch (error) {
       console.warn("Watchtower: relay state unavailable", error);
@@ -139,9 +135,7 @@
   async function loadServers() {
     serversRetryAt = Date.now() + SERVERS_RETRY_MS;
     try {
-      const response = await fetch(`${relay}/control/servers`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const list = parseServers(await response.json());
+      const list = parseServers(await W.fetchJson(`${relay}/control/servers`));
       if (!list.length) throw new Error("empty server list");
       servers = new Map(list.map(s => [s.server, s]));
       serversNote = "";
@@ -183,6 +177,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify(body),
+        signal: W.relaySignal(),
       });
       reply = await response.json().catch(() => ({}));
     } catch (error) {

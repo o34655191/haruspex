@@ -8,13 +8,14 @@
   const live = window.HeimdallLive;
 
   // Identities and where each one's relay lives (one lwlive per satellite,
-  // each on its own Tailscale Funnel port). Sentinel and Tycho are in orbit.
+  // each on its own Tailscale Funnel port: 443, 8443, 10000 -- the only three
+  // Funnel allows). Sentinel, Tycho and Hayabusa are in orbit.
   const SATELLITES = [
     { id: "sat01", code: "SAT 01", name: "Sentinel", live: true, relay: "wss://heimdall.tailc3e099.ts.net/ws",
       namesake: "After ESA's Sentinel fleet, Europe's eyes on Earth. Never blinks." },
     { id: "sat02", code: "SAT 02", name: "Tycho", live: true, relay: "wss://heimdall.tailc3e099.ts.net:8443/ws",
       namesake: "After Tycho Brahe, who mapped the sky without a telescope. Also a fine place to get a Rocinante fixed." },
-    { id: "sat03", code: "SAT 03", name: "Hayabusa", live: false,
+    { id: "sat03", code: "SAT 03", name: "Hayabusa", live: true, relay: "wss://heimdall.tailc3e099.ts.net:10000/ws",
       namesake: "After JAXA's falcon, which flew home with pieces of an asteroid. Settles for marches." },
     { id: "sat04", code: "SAT 04", name: "Leonardo", live: false,
       namesake: "After da Vinci and the ISS module that carries his name. Still sketching the launch." },
@@ -41,6 +42,18 @@
     const url = new URL(feedUrl(sat));
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
     return url.origin;
+  }
+
+  // A tunnel can accept the connection and then never answer, so every relay
+  // request gives up after this long instead of hanging the page.
+  const RELAY_TIMEOUT_MS = 8000;
+  const relaySignal = () => AbortSignal.timeout(RELAY_TIMEOUT_MS);
+
+  // fetchJson reads a relay endpoint; it throws on a timeout or an HTTP error.
+  async function fetchJson(url) {
+    const response = await fetch(url, { cache: "no-store", signal: relaySignal() });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
   }
 
   const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
@@ -169,7 +182,7 @@
 
   window.Watchtower = {
     WARZONE, SATELLITES, STATES, TONES, STRUCTURE_COLORS,
-    feedUrl, relayHttp, clamp, byId, centre, fmtCentre, fmtArea, sameArea, clock, ago, boxAt,
+    feedUrl, relayHttp, relaySignal, fetchJson, clamp, byId, centre, fmtCentre, fmtArea, sameArea, clock, ago, boxAt,
     loadLayout, svgEl, rectAttrs, warzoneSvg, dimPathData, dimOutside, boxShape,
   };
 })();
