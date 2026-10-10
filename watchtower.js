@@ -9,7 +9,8 @@
 
   // Identities and where each one's relay lives (one lwlive per satellite,
   // each on its own Tailscale Funnel port: 443, 8443, 10000 -- the only three
-  // Funnel allows). Sentinel, Tycho and Hayabusa are in orbit.
+  // Funnel allows -- so Leonardo shares 443 under the /sat04 path). All four
+  // are in orbit.
   const SATELLITES = [
     { id: "sat01", code: "SAT 01", name: "Sentinel", live: true, relay: "wss://heimdall.tailc3e099.ts.net/ws",
       namesake: "After ESA's Sentinel fleet, Europe's eyes on Earth. Never blinks." },
@@ -17,8 +18,8 @@
       namesake: "After Tycho Brahe, who mapped the sky without a telescope. Also a fine place to get a Rocinante fixed." },
     { id: "sat03", code: "SAT 03", name: "Hayabusa", live: true, relay: "wss://heimdall.tailc3e099.ts.net:10000/ws",
       namesake: "After JAXA's falcon, which flew home with pieces of an asteroid. Settles for marches." },
-    { id: "sat04", code: "SAT 04", name: "Leonardo", live: false,
-      namesake: "After da Vinci and the ISS module that carries his name. Still sketching the launch." },
+    { id: "sat04", code: "SAT 04", name: "Leonardo", live: true, relay: "wss://heimdall.tailc3e099.ts.net/sat04/ws",
+      namesake: "After da Vinci and the ISS module that carries his name. Sketches every march it sees." },
   ];
 
   const STATES = {
@@ -37,11 +38,12 @@
   // (honoured on dev hosts only) replaces every satellite's relay.
   const feedUrl = sat => live.relayUrl(location.href, sat.relay);
 
-  // relayHttp is a satellite relay's https origin, the feed's host and port.
+  // relayHttp is a satellite relay's https base: the feed's host and port plus
+  // any path the relay is mounted under (Leonardo's /sat04), without /ws.
   function relayHttp(sat) {
     const url = new URL(feedUrl(sat));
     url.protocol = url.protocol === "wss:" ? "https:" : "http:";
-    return url.origin;
+    return url.origin + url.pathname.replace(/\/(?:ws)?$/, "");
   }
 
   // A tunnel can accept the connection and then never answer, so every relay
