@@ -46,6 +46,8 @@
     "inspector", "closeInspector",
     "inspectorKind", "inspectorTitle", "inspectorDetails", "battleTitle",
     "integrityNotice", "integrityTitle", "integrityText", "integrityState",
+    // Optional (manifest v4): pages without these elements simply skip the feature.
+    "capitolHolder", "activityStrip", "showCombat", "showCombatLabel",
   ].map(id => [id, document.getElementById(id)]));
 
   let manifest;
@@ -73,6 +75,13 @@
   let focusUI;
   let refreshPlayerList = () => {};
   let live = null;
+  // Manifest v4 extras: combat flashes ([4, t, pos, server, kind], time-sorted)
+  // and capitol/cannon holders ([5, t, pos, server, abbr, state]).
+  let combatEvents = [];
+  let holders = new Map();
+  const COMBAT_WIN = 0, COMBAT_LOSS = 1, COMBAT_BURN = 2, COMBAT_RUBBLE = 3, COMBAT_TOWER = 4;
+  const CAPITOL_STATE = { closed: 5, open: 4, held: 6 };
+  const ACTIVITY_BIN_MS = 60000;
 
   const isCurated = name => CURATED_PLAYERS.includes(String(name).trim().toLowerCase());
 
@@ -344,6 +353,8 @@
       // operation 4 is generic map-object removal. It intentionally cannot
       // mutate player bases because the removed object may be a mine, farm,
       // rubble, ashes, or another non-player entity.
+    } else if (type === 5) {
+      holders.set(event[2], { server: event[3], abbr: event[4], state: event[5], since: time });
     } else if (type === 3) {
       const actor = event[3];
       const existing = bases.get(actor);
@@ -426,6 +437,7 @@
   function rebuildState(time) {
     activeMarches = new Map();
     bases = new Map();
+    holders = new Map();
     eventIndex = 0;
     while (eventIndex < events.length && events[eventIndex][1] <= time) {
       applyEvent(events[eventIndex++]);
@@ -475,6 +487,112 @@
     ui.eventCount.textContent = (live ? live.received : eventIndex).toLocaleString();
     updateIntegrityReadout();
     updateCaptureReadout();
+    updateHolderReadout();
+    drawActivity();
+  }
+
+  // capitolHolderText describes the capitol's controller from the type-5 holder events.
+  function capitolHolderText() {
+    const holder = holders.get(CAPITOL.y * manifest.mapWidth + CAPITOL.x);
+    if (!holder) return "";
+    if (holder.state === CAPITOL_STATE.held && holder.server) {
+      const held = Math.max(0, Math.floor((currentTime - holder.since) / 1000));
+      const clock = `${Math.floor(held / 60)}m ${String(held % 60).padStart(2, "0")}s`;
+      return `Capitol held by ${holder.abbr || "?"} · S${holder.server} · ${clock}`;
+    }
+    if (holder.state === CAPITOL_STATE.closed) {
+      return holder.server ? `Capitol closed · last holder ${holder.abbr} · S${holder.server}` : "Capitol closed";
+    }
+    return "Capitol open · unheld";
+  }
+
+  function updateHolderReadout() {
+    const pill = ui.capitolHolder;
+    if (!pill || live) return;
+    const text = capitolHolderText();
+    pill.hidden = !text;
+    if (!text) return;
+    pill.textContent = text;
+    const holder = holders.get(CAPITOL.y * manifest.mapWidth + CAPITOL.x);
+    pill.style.setProperty("--holder-color", holder?.server ? campColor(holder.server) : "#8194a7");
+  }
+
+  // drawActivity draws per-minute base-attack results under the timeline:
+  // side A's hits rise above the middle line, side B's hang below it, with the
+  // battle markers (capitol open / close) and the playhead on top.
+  let activityBins = null;
+  function buildActivity() {
+    const strip = ui.activityStrip;
+    if (!strip || !combatEvents.length) return;
+    computeActivity();
+    strip.hidden = false;
+    strip.addEventListener("click", event => {
+      const rect = strip.getBoundingClientRect();
+      setPlaying(false);
+      setTime((event.clientX - rect.left) / rect.width * manifest.duration);
+    });
+  }
+
+  // computeActivity re-buckets by camp, so it reruns when the sides change.
+  function computeActivity() {
+    if (!ui.activityStrip || !combatEvents.length) return;
+    const count = Math.ceil(manifest.duration / ACTIVITY_BIN_MS) + 1;
+    activityBins = { a: new Array(count).fill(0), b: new Array(count).fill(0), max: 1 };
+    for (const [, time, , server, kind] of combatEvents) {
+      if (kind !== COMBAT_WIN && kind !== COMBAT_LOSS && kind !== COMBAT_BURN) continue;
+      const camp = campOf(server);
+      if (camp < 0) continue;
+      const bin = Math.floor(time / ACTIVITY_BIN_MS);
+      (camp === 0 ? activityBins.a : activityBins.b)[bin]++;
+    }
+    activityBins.max = Math.max(1, ...activityBins.a, ...activityBins.b);
+  }
+
+  function drawActivity() {
+    const strip = ui.activityStrip;
+    if (!strip || !activityBins || strip.hidden) return;
+    const ratio = Math.min(window.devicePixelRatio || 1, 2);
+    const width = Math.max(1, strip.clientWidth);
+    const height = Math.max(1, strip.clientHeight);
+    if (strip.width !== Math.round(width * ratio) || strip.height !== Math.round(height * ratio)) {
+      strip.width = Math.round(width * ratio);
+      strip.height = Math.round(height * ratio);
+    }
+    const g = strip.getContext("2d");
+    g.setTransform(ratio, 0, 0, ratio, 0, 0);
+    g.clearRect(0, 0, width, height);
+    const middle = height / 2;
+    const step = width * ACTIVITY_BIN_MS / Math.max(1, manifest.duration);
+    const scale = (middle - 2) / activityBins.max;
+    activityBins.a.forEach((value, index) => {
+      if (!value) return;
+      g.fillStyle = hexColor(ui.sideAColor.value, .8);
+      g.fillRect(index * step, middle - value * scale, Math.max(1, step - 1), value * scale);
+    });
+    activityBins.b.forEach((value, index) => {
+      if (!value) return;
+      g.fillStyle = hexColor(ui.sideBColor.value, .8);
+      g.fillRect(index * step, middle, Math.max(1, step - 1), value * scale);
+    });
+    g.fillStyle = "rgba(129,148,167,.35)";
+    g.fillRect(0, middle, width, 1);
+    g.font = "9px ui-monospace, monospace";
+    g.textBaseline = "top";
+    for (const marker of manifest.markers || []) {
+      const x = marker.t / manifest.duration * width;
+      g.fillStyle = "rgba(255,209,102,.85)";
+      g.fillRect(x, 0, 1, height);
+      const label = marker.label;
+      const labelWidth = g.measureText(label).width;
+      const labelX = x + 4 + labelWidth > width ? x - labelWidth - 4 : x + 4;
+      g.fillStyle = "rgba(8,12,18,.85)";
+      g.fillRect(labelX - 2, 1, labelWidth + 4, 12);
+      g.fillStyle = "rgba(255,209,102,.95)";
+      g.fillText(label, labelX, 2);
+    }
+    const head = currentTime / manifest.duration * width;
+    g.fillStyle = "#fff";
+    g.fillRect(head - .75, 0, 1.5, height);
   }
 
   function updateIntegrityReadout() {
@@ -607,7 +725,9 @@
   // drawCameraAreas outlines what each live camera watches, coloured by its
   // state, and dims the rest of the warzone, where nothing is observed.
   function drawCameraAreas(width, height) {
-    const watched = live ? live.cameras.filter(camera => camera.area) : [];
+    // Recorded fights carry the recording camera's box (manifest v4).
+    const recorded = manifest?.cameraArea ? [{ camera: "", state: "live", area: manifest.cameraArea, label: "RECORDING CAMERA · NOTHING OBSERVED OUTSIDE" }] : [];
+    const watched = live ? live.cameras.filter(camera => camera.area) : recorded;
     if (!watched.length) return;
     const box = ({ left, bottom, right, top }) => {
       const a = toScreen(left, bottom, width, height);
@@ -633,7 +753,7 @@
       ctx.strokeStyle = hexColor(color, .85);
       ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
       ctx.fillStyle = hexColor(color, .95);
-      ctx.fillText(`CAMERA ${camera.camera.toUpperCase()} · ${camera.state.toUpperCase()}`, rect.x + 6, rect.y + 6);
+      ctx.fillText(camera.label || `CAMERA ${camera.camera.toUpperCase()} · ${camera.state.toUpperCase()}`, rect.x + 6, rect.y + 6);
     }
     ctx.restore();
   }
@@ -741,7 +861,24 @@
 
     const center = toScreen(CAPITOL.x, CAPITOL.y, width, height);
     const markerSize = clamp(camera.zoom * 3.2, 4, 14);
-    ctx.fillStyle = "rgba(255,209,102,.2)";
+    // render() runs before a manifest loads, so fall back to the warzone width.
+    const holderAt = (dx, dy) => {
+      if (!holders.size) return null;
+      const holder = holders.get((CAPITOL.y + dy) * warzoneSize() + CAPITOL.x + dx);
+      return holder?.state === CAPITOL_STATE.held && holder.server ? holder : null;
+    };
+    const sanctuaryHolder = holderAt(0, 0);
+    if (sanctuaryHolder) {
+      // Held: a glow in the holder's camp colour that grows with holding time.
+      const held = clamp((currentTime - sanctuaryHolder.since) / 60000, 0, 1);
+      ctx.save();
+      ctx.shadowColor = campColor(sanctuaryHolder.server);
+      ctx.shadowBlur = 10 + held * 18;
+      ctx.fillStyle = campColor(sanctuaryHolder.server, .55);
+      ctx.beginPath(); ctx.arc(center.x, center.y, markerSize * 1.9, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+    }
+    ctx.fillStyle = sanctuaryHolder ? campColor(sanctuaryHolder.server, .8) : "rgba(255,209,102,.2)";
     ctx.strokeStyle = "#ffd166";
     ctx.lineWidth = 1.3;
     ctx.beginPath();
@@ -754,9 +891,14 @@
     for (const [dx, dy] of CAPITOL.cannons) {
       const cannon = toScreen(CAPITOL.x + dx, CAPITOL.y + dy, width, height);
       const radius = clamp(camera.zoom * 1.35, 2, 6);
-      ctx.fillStyle = "rgba(255,209,102,.22)";
+      const cannonHolder = holderAt(dx, dy);
+      ctx.fillStyle = cannonHolder ? campColor(cannonHolder.server, .85) : "rgba(255,209,102,.22)";
       ctx.strokeStyle = "rgba(255,209,102,.9)";
       ctx.beginPath(); ctx.arc(cannon.x, cannon.y, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      if (cannonHolder && camera.zoom >= 2.5) mapLabel(cannonHolder.abbr, CAPITOL.x + dx, CAPITOL.y + dy - 3, width, height, campColor(cannonHolder.server));
+    }
+    if (sanctuaryHolder && camera.zoom >= 1.35) {
+      mapLabel(`${sanctuaryHolder.abbr} · S${sanctuaryHolder.server}`, CAPITOL.x, CAPITOL.y - 5, width, height, campColor(sanctuaryHolder.server));
     }
 
     if (camera.zoom >= 1.35) {
@@ -857,6 +999,65 @@
     if (march.player === selectedPlayer || featuredPlayers.has(march.player)) playerBadge(march.player, point, player[3], false);
   }
 
+  // A flash stays visible for this much replay time: a quarter of a real
+  // second at any speed, never shorter than 1 s of game time.
+  const flashSpan = () => clamp(Number(ui.speed.value) * 250, 1000, 30000);
+
+  function firstCombatAt(time) {
+    let low = 0;
+    let high = combatEvents.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (combatEvents[middle][1] < time) low = middle + 1;
+      else high = middle;
+    }
+    return low;
+  }
+
+  // drawCombat pulses a ring where a battle resolved: attacker's camp colour
+  // for a successful hit, pale for a hit the defender held, orange for a base
+  // burned down, sand for rubble cleared and a wide dashed ring for a cannon shot.
+  function drawCombat(width, height, server) {
+    if (!combatEvents.length || ui.showCombat?.checked === false) return;
+    const span = flashSpan();
+    const size = Math.max(4, camera.zoom * 3);
+    ctx.save();
+    for (let i = firstCombatAt(currentTime - span); i < combatEvents.length && combatEvents[i][1] <= currentTime; i++) {
+      const [, time, position, attacker, kind] = combatEvents[i];
+      if (server !== null && attacker !== server) continue;
+      const world = unpack(position);
+      const point = toScreen(world.x, world.y, width, height);
+      if (!inView(point, width, height, 60)) continue;
+      const age = clamp((currentTime - time) / span, 0, 1);
+      const alpha = 1 - age;
+      let radius = size * (.7 + age * 1.8);
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      if (kind === COMBAT_WIN) {
+        ctx.strokeStyle = campColor(attacker, alpha);
+      } else if (kind === COMBAT_LOSS) {
+        ctx.strokeStyle = `rgba(226,234,243,${alpha * .7})`;
+        ctx.lineWidth = 1.25;
+      } else if (kind === COMBAT_BURN) {
+        ctx.fillStyle = `rgba(255,128,32,${alpha * .45})`;
+        ctx.beginPath(); ctx.arc(point.x, point.y, radius * 1.3, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = `rgba(255,170,60,${alpha})`;
+        radius *= 1.3;
+      } else if (kind === COMBAT_RUBBLE) {
+        ctx.strokeStyle = `rgba(214,190,140,${alpha * .8})`;
+        ctx.lineWidth = 1;
+      } else if (kind === COMBAT_TOWER) {
+        ctx.strokeStyle = campColor(attacker, alpha * .9);
+        ctx.setLineDash([4, 3]);
+        radius = Math.max(radius, camera.zoom * (3 + age * 9));
+      } else {
+        continue;
+      }
+      ctx.beginPath(); ctx.arc(point.x, point.y, radius, 0, Math.PI * 2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
   function render() {
     if (focusUI && selectedPlayer < 0) setText(focusUI.playerStatus, "Select a player to spotlight their base and marches. Queens and stars are curated, not rankings.");
     if (focusUI && selectedPlayer >= 0) {
@@ -910,6 +1111,7 @@
     const server = selectedServer();
     if (ui.showBases.checked) for (const base of bases.values()) drawBase(base, width, height, server);
     for (const march of activeMarches.values()) drawMarch(march, width, height, server);
+    drawCombat(width, height, server);
     redrawNeeded = false;
   }
 
@@ -955,6 +1157,14 @@
       : "";
   }
 
+  // statRows lists a player's whole-fight totals when the manifest has them (v4).
+  function statRows(playerIndex) {
+    const stats = manifest?.playerStats?.[playerIndex];
+    const names = manifest?.playerStatNames || [];
+    if (!stats) return [];
+    return names.map((name, index) => [name, Number(stats[index] || 0).toLocaleString()]);
+  }
+
   function inspect(hit) {
     if (hit.kind === "march") {
       const march = hit.data;
@@ -972,7 +1182,7 @@
       ];
       const speed = formatMarchSpeed(march.speed);
       if (speed) rows.splice(3, 0, ["Speed", speed]);
-      detailRows(rows);
+      detailRows([...rows, ...statRows(march.player)]);
     } else if (hit.kind === "structure") {
       const structure = hit.data;
       const { core, zone } = live.layout.footprints[structure.kind];
@@ -1003,7 +1213,7 @@
         const until = new Date(base.shieldEnd * 1000);
         rows.push(["Shield until", until.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })]);
       }
-      detailRows(rows);
+      detailRows([...rows, ...statRows(meta[4])]);
     }
     ui.inspector.hidden = false;
   }
@@ -1046,9 +1256,15 @@
         events.push(...payload.e);
       }
       events.sort((a, b) => a[1] - b[1]);
+      combatEvents = events.filter(event => event[0] === 4);
+      if (combatEvents.length && ui.showCombatLabel) ui.showCombatLabel.hidden = false;
+      for (const key of document.querySelectorAll("[data-v4-key]")) {
+        key.hidden = key.dataset.v4Key === "combat" ? !combatEvents.length : !manifest.cameraArea;
+      }
       populateServers();
       restorePalette();
       setupPlayerControls();
+      buildActivity();
       ui.loadState.textContent = `${events.length.toLocaleString()} events · ${formatDuration(manifest.duration)}`;
       ui.loadState.className = "load-state ready";
       ui.play.disabled = false;
@@ -1495,7 +1711,12 @@
 
   function updatePaletteControls() {
     ui.sideControls.hidden = false;
-    if (manifest) updateCaptureReadout();
+    if (manifest) {
+      updateCaptureReadout();
+      computeActivity();
+      updateHolderReadout();
+      drawActivity();
+    }
     redrawNeeded = true;
   }
 
@@ -1511,9 +1732,10 @@
   ui.resetView.addEventListener("click", resetView);
   ui.zoomIn.addEventListener("click", () => zoomFromCenter(1.45));
   ui.zoomOut.addEventListener("click", () => zoomFromCenter(1 / 1.45));
-  for (const control of [ui.showBases, ui.showInferred, ui.showRoutes, ui.showLabels, ui.showCapitol, ui.serverFilter]) {
-    control.addEventListener("change", () => { redrawNeeded = true; });
+  for (const control of [ui.showBases, ui.showInferred, ui.showRoutes, ui.showLabels, ui.showCapitol, ui.serverFilter, ui.showCombat]) {
+    control?.addEventListener("change", () => { redrawNeeded = true; });
   }
+  window.addEventListener("resize", () => drawActivity());
   for (const control of [ui.colorMode, ui.sideAServer, ui.sideBServer, ui.sideAColor, ui.sideBColor, ui.highlightAlliance, ui.highlightColor]) {
     control.addEventListener("change", () => {
       updatePaletteControls();

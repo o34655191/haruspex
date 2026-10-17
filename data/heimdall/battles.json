@@ -3,6 +3,21 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "svs-472-vs-422",
+      "title": "Server 472 vs 422",
+      "date": "2026-10-17",
+      "start": 1792243740081,
+      "duration": 7628502,
+      "events": 331026,
+      "marches": 219752,
+      "servers": [472, 422],
+      "note": "Capitol warzone · sat camera · hits, holders, intensity strip",
+      "integrity": {
+        "title": "Single camera — capitol area only",
+        "message": "Recorded by one camera on server 422's map watching x/y 460–560 (the capitol and its north-east side) from 18:29 to 20:36 (UTC+5). Bases and marches outside the dashed box were not observed, so the mud area's west and south arms are missing. Flashes mark linked battle results, burns, rubble clears and cannon shots; marches are interpolated between observed endpoints."
+      }
+    },
+    {
       "id": "goldvein-w3",
       "href": "goldvein-w3.html",
       "title": "Gold Vein · Week 3 · 3 vs 5",

@@ -7,7 +7,7 @@
 <title>Heimdall — Battle Replay</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="styles.css">
-<link rel="stylesheet" href="heimdall.css?v=20260930-live3">
+<link rel="stylesheet" href="heimdall.css?v=20261017-v4b">
 </head>
 <body class="replay-page">
   <main class="replay-shell">
@@ -39,7 +39,10 @@
         <span><i class="key-target"></i>Route</span>
         <span><i class="key-capitol"></i>Capitol</span>
         <span><i class="key-blocked"></i>No teleport</span>
+        <span data-v4-key="combat" hidden><i class="key-hit"></i>Hit · burn</span>
+        <span data-v4-key="camera" hidden><i class="key-camera"></i>Camera view</span>
       </div>
+      <div class="map-holder" id="capitolHolder" role="status" hidden></div>
       <div class="map-help">Drag to pan · Wheel or pinch to zoom · Click for details</div>
       <div class="map-zoom" aria-label="Map zoom controls">
         <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
@@ -103,6 +106,7 @@
           <option value="120">120×</option>
         </select>
       </div>
+      <canvas class="activity-strip" id="activityStrip" hidden aria-label="Base attacks per minute: first server above the line, second below; click to jump"></canvas>
       <div class="transport-meta">
         <span><b id="activeMarches">0</b> active marches</span>
         <span><b id="visibleBases">0</b> bases (<b id="confirmedBases">0</b> observed · <b id="inferredBases">0</b> inferred)</span>
@@ -116,6 +120,7 @@
       <label><input id="showRoutes" type="checkbox" checked> Route arrows</label>
       <label><input id="showLabels" type="checkbox"> Alliance labels</label>
       <label><input id="showCapitol" type="checkbox" checked> Capitol layout</label>
+      <label id="showCombatLabel" hidden><input id="showCombat" type="checkbox" checked> Combat flashes</label>
       <label for="serverFilter">Server</label>
       <select id="serverFilter"><option value="all">All servers</option></select>
       <button id="resetView" type="button">Reset view</button>
@@ -146,6 +151,6 @@
     <noscript>This replay requires JavaScript.</noscript>
   </main>
   <script src="heimdall-live.js?v=20260930-live3"></script>
-  <script src="heimdall.js?v=20260930-live3"></script>
+  <script src="heimdall.js?v=20261017-v4b"></script>
 </body>
 </html>

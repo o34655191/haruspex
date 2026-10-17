@@ -20,6 +20,13 @@
 .key-target{height:1px!important;background:var(--enemy)}
 .key-capitol{border:1px solid #7ce1ff;background:rgba(124,225,255,.08)}
 .key-blocked{border:1px solid #ff6174;background:rgba(255,69,91,.2)}
+.key-hit{border-radius:50%;border:2px solid #ffaa3c;box-sizing:border-box}
+.key-camera{border:1px dashed #8de0b5}
+.map-key [hidden]{display:none}
+.map-holder{--holder-color:#8194a7;position:absolute;z-index:2;left:50%;top:50px;transform:translateX(-50%);max-width:calc(100% - 90px);padding:7px 12px;border:1px solid color-mix(in srgb,var(--holder-color) 70%,transparent);border-radius:999px;background:rgba(8,11,16,.86);color:var(--holder-color);font:600 11px var(--mono);letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:0 0 18px color-mix(in srgb,var(--holder-color) 30%,transparent)}
+.map-holder[hidden]{display:none}
+.activity-strip{display:block;width:100%;height:46px;margin-top:10px;border:1px solid var(--line);border-radius:8px;background:#080c12;cursor:pointer}
+.activity-strip[hidden]{display:none}
 .map-help{right:12px;bottom:12px;padding:7px 9px;border-radius:7px}
 .map-zoom{position:absolute;z-index:3;left:12px;bottom:12px;display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(40,50,63,.9);border-radius:9px;background:rgba(8,11,16,.88);box-shadow:0 8px 24px rgba(0,0,0,.28)}
 .map-zoom button{display:grid;place-items:center;width:34px;height:34px;padding:0;border:0;background:transparent;color:var(--ink-dim);font:22px/1 var(--mono);cursor:pointer}
@@ -92,6 +99,7 @@
   .capture-bars{grid-template-columns:1fr;gap:9px}.capture-heading{align-items:center}.capture-row{grid-template-columns:48px minmax(80px,1fr) 42px}
   .map-key{right:12px;flex-wrap:wrap;gap:7px 11px}
   .map-help{display:none}
+  .map-holder{top:auto;bottom:12px;left:58px;right:12px;transform:none;max-width:none;text-align:center}
   .map-zoom button{width:44px;height:44px;font-size:25px}
   .map-compass{right:8px;top:76px}
 }
