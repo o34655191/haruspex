@@ -3,6 +3,21 @@
   "defaultBattle": "battle-435-vs-472",
   "battles": [
     {
+      "id": "svs-472-vs-474",
+      "title": "Server 472 vs 474",
+      "date": "2026-10-24",
+      "start": 1792847979624,
+      "duration": 5387141,
+      "events": 249061,
+      "marches": 161677,
+      "servers": [472, 474],
+      "note": "Capitol warzone · sat camera · hits, holders, intensity strip",
+      "integrity": {
+        "title": "Single camera — ends before the fight did",
+        "message": "Recorded by one camera on server 472's map watching x/y 300–700 (the whole capitol area) from 18:19 to 19:49 (UTC+5). The recording stopped at 19:49:26 while the capitol was still changing hands, so the final ~10 minutes are missing. Bases already in the mud at 18:19 are shown from the start, but their earlier teleports were not seen. Flashes mark linked battle results, burns, rubble clears and cannon shots; marches are interpolated between observed endpoints."
+      }
+    },
+    {
       "id": "svs-472-vs-422",
       "title": "Server 472 vs 422",
       "date": "2026-10-17",
